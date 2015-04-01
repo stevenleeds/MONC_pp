@@ -79,6 +79,7 @@ derivedfields={
 'TKERES':['resolved TKE',u'm2 s-2'],
 'TKESFS':['subfilter-scale TKE',u'm2 s-2'],
 'KM':['eddy viscosity',u'm-1 s-1'],
+'DP':['pressure perturbation with respect to slab mean',u'Pa'],
 }
 
 # vertically integrated/maximum/minimum variables
@@ -95,6 +96,13 @@ intfields={
 'BUOYXMIN':['minimum buoyancy in column',u'm s-2','min'],
 'CLDTOP':['cloud top',u'm','max'],
 'CLDW1TOP':['cloudy updraft (1 m/s) top',u'm','max'],
+}
+
+fracfields={
+'frac':['fraction',u'-'],
+'fracxe':['fraction (at xe)',u'-','xe'],
+'fracye':['fraction (at ye)',u'-','ye'],
+'fracze':['fraction (at ze)',u'-','ze'],
 }
 
 # domain only variables

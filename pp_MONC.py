@@ -28,7 +28,9 @@
 # outputs to a zipped file which is saved with f4 precision (to reduce file size)
 # and further reduced precision for in-cloud variables
 
-# USAGE EXAMPLE
+# Requires python with netcdf4python, numpy and scipy (for embedding C-code with weave)
+
+# EXAMPLE
 # python pp_MONC.py bomex bomex
 # ------------------case directory
 # ------------------------experiment name                        
@@ -36,11 +38,12 @@
 # TODO
 # ADD FURTHER VARIABLES (NEEDS REFERENCE PROFILES)
 # ADD SAMPLING BASED ON BUOYANCY
-# ADD ICE TO CLOUD MASK, BUT ONLY FOR CASES WHERE QI IS AVAILABLE (FIGURE OUT CORRESPONDING Q NUMBER?)
+# SAMPLING OF STAGGERED VARIABLES...CURRENTLY USING DIFFERENT GRIDS FOR MASKS
+#   INTERPOLATE SATURATION DEFICIT AND DETERMINE BUOYANCY USING INTERPOLATED CONSERVED VARIABLES?
+# FIGURE OUT Q NUMBER FOR ICE (AND FOR OTHER SPECIES)
 # DISCUSS MOMENTUM, ENERGY, VORTICITY, HELICITY AND "PRESSURE LAPLACIAN" BUDGET TOOLS
 # ADD AN OPTION PARSER?
 # TAKE STAGGERING/WEIGHTING INTO ACCOUNT TO PRODUCE SPECTRA AT THE SAME LEVELS FOR W AND OTHER VARIABLES?
-# ADD HEIGHTS TO DESCRIPTION OF STAGGERED VARIABLES
 
 from numpy import *
 from netCDF4 import Dataset
@@ -86,6 +89,9 @@ spectralevels=[
 [10,20],
 [20,30],
 ]
+
+nqc=1 # q number corresponding to cloud droplet liquid water
+nqi=-1 # q number corresponding to cloud ice
 
 myusername=getpass.getuser()
 hostname=socket.gethostname()
@@ -166,7 +172,13 @@ class mask:
         pass
     def setfield(self,field):
         self.field=field
-                     
+    def setfieldxe(self,field):
+        self.fieldxe=field
+    def setfieldye(self,field):
+        self.fieldye=field
+    def setfieldze(self,field):
+        self.fieldze=field
+                                             
 # prepare spectral data into 2d arrays
 # containing stretches along all points 
 # that match sampling criteria
@@ -279,7 +291,10 @@ class get_variable_class():
     def gq(self,key,index):
         if(nboundlines>0):
             if key in self.varkeys:
-                return self.data.variables[(key)][index,nboundlines:-nboundlines,nboundlines:-nboundlines,:]
+                if index<len(self.data.variables[(key)]):
+                    return self.data.variables[(key)][index,nboundlines:-nboundlines,nboundlines:-nboundlines,:]
+                else:
+                    return zeros(shape(self.data.variables[(key)][0]))
             else:
                 return(self.data.variables[('p')][nboundlines:-nboundlines,nboundlines:-nboundlines,:]*nan)
         else:
@@ -307,15 +322,13 @@ class nchelper(object,get_variable_class):
         self.data=data
         self.varkeys=self.data.variables.keys()
         self.tstep=self.tstep+1
-        qci=self.gq('q',1)
         w=self.gv('w')
         wplus=dstack((w[:,:,1:],0.0*w[:,:,-1]))
-        w1=((w+wplus)>0.5) # cells with updraft speeds larger than 1 m/s
-                           # just take the mean value for now
-        self.cld=(qci>1.0e-6)
-        self.cldw1=self.cld*w1
+        self.wzc=0.5*(w+wplus)
         self.wmin=nanmin(w,axis=2)
         self.wmax=nanmax(w,axis=2)
+        qci=self.gq('q',nqc)+self.gq('q',nqi) # try to include ice
+        self.cld=(qci>1.0e-6)
         self.cloudycolumn=1.0*(sum(self.cld,axis=2)>0)
                               
 class ncobject(object,get_variable_class):
@@ -417,11 +430,12 @@ class ncobject(object,get_variable_class):
            else:
               dimsarr+=['xc']
         dims=tuple(dimsarr)
-        longname=allfields[var][0]
         units=allfields[var][1]
         if mask==None:
+            longname=allfields[var][0]
             self.init_var(var,longname,units,dims)
         else:
+            longname=allfields[var][0]+' ('+mask+')'
             self.init_var(var+mask,longname,units,dims)         
     def init_var(self,var,longname,units,dims):
         so=self.outfile.createVariable(var, 'f4', dims,zlib=lzlib)
@@ -576,7 +590,16 @@ class statgroupspectra(ncobject):
                     self.init_dim('wavenr','wave number [m-1]',wavenr)
                     self.initiated=True
                 if(self.tstep==0):
-                    self.init_var(var+levelstring,'power spectrum ('+self.direction+'-direction) of '+var+' at levels '+str(speclower)+'-'+str(specupper),'PSD',('time','wavenr'))
+                    if 'ze' in allfields[var]:
+                        self.ze=self.gdim('z')
+                        self.init_var(var+levelstring,'power spectrum ('+self.direction+'-direction) of '+var+' at '+str(int(self.ze[speclower]))+'-'+str(int(self.ze[specupper]))+' meter (levels '+str(speclower)+'-'+str(specupper)+')','PSD',('time','wavenr'))
+                    else:
+                        zmin=self.gdim('z')[:-1]
+                        zplus=self.gdim('z')[1:]
+                        zhalf=0.5*(zmin+zplus)
+                        bottom=-zhalf[0]
+                        self.zc=hstack(([bottom],zhalf))
+                        self.init_var(var+levelstring,'power spectrum ('+self.direction+'-direction) of '+var+' at '+str(int(self.zc[speclower]))+'-'+str(int(self.zc[specupper]))+' meter (levels '+str(speclower)+'-'+str(specupper)+')','PSD',('time','wavenr'))
                 self.put_var(var+levelstring,p)
                 
 class statgroupspectra_y(statgroupspectra):        
@@ -632,10 +655,30 @@ class dataprocessor(get_variable_class):
             self.init_masks(['cld','cldupd','cldupdw1','upd'])
     def calc_masks(self):
         if lsamp:
+            w=self.gv('w')
+            cldze=self.helper.cld # should be updated with interpolated saturation deficit
+            self.masks['cld'].setfieldze(cldze)
+            self.masks['cldupd'].setfieldze(cldze*(w>0.0))
+            self.masks['cldupdw1'].setfieldze(cldze*(w>1.0))
+            self.masks['upd'].setfieldze((w>0.0))
+            del cldze
             self.masks['cld'].setfield(self.helper.cld)
-            self.masks['cldupd'].setfield(self.helper.cld*(self.gv('w')>0))
-            self.masks['cldupdw1'].setfield(self.helper.cldw1)        
-            self.masks['upd'].setfield(self.gv('w')>0)
+            self.masks['cldupd'].setfield(self.helper.cld*(self.helper.wzc>0.0))
+            self.masks['cldupdw1'].setfield(self.helper.cld*(self.helper.wzc>1.0))
+            self.masks['upd'].setfield((self.helper.wzc>0.0))
+            cldxe=self.helper.cld # should be updated with interpolated saturation deficit
+            wxe=0.5*(self.helper.wzc[:,:,:]+vstack((self.helper.wzc[-1,:,:][None,:,:],self.helper.wzc[:-1,:,:])))
+            self.masks['cld'].setfieldxe(cldxe)
+            self.masks['cldupd'].setfieldxe(cldxe*(wxe>0.0))
+            self.masks['cldupdw1'].setfieldxe(cldxe*(wxe>1.0))
+            self.masks['upd'].setfieldxe((wxe>0.0))
+            del cldxe,wxe
+            cldye=self.helper.cld # should be updated with interpolated saturation deficit
+            wye=0.5*(self.helper.wzc[:,:,:]+hstack((self.helper.wzc[:,-1,:][:,None,:],self.helper.wzc[:,:-1,:])))
+            self.masks['cld'].setfieldye(cldye)
+            self.masks['cldupdw1'].setfieldye(cldye*(wye>1.0))
+            self.masks['cldupd'].setfieldye(cldye*(wye>0.0))
+            self.masks['upd'].setfieldye((wye>0.0))
     def init_masks(self,masks):
         self.masks={}
         for maskname in masks:
@@ -680,8 +723,7 @@ class dataprocessor(get_variable_class):
         self.stat_1d.put_make_var(var,mean_2d(field))      
         self.stat_xz.put_make_var(var,mean_xz(field))
         self.stat_yz.put_make_var(var,mean_yz(field))
-        for mask in self.masks.keys():
-            self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].field)/mean_2d(self.masks[mask].field),mask)
+        self.masked_var(var,field)
     def process_var(self,var,field):
         self.stat_1d.put_make_var(var,mean_2d(field))
         self.cross_xz.put_make_var(var,field[:,ysel,:])
@@ -697,8 +739,17 @@ class dataprocessor(get_variable_class):
             whereinf=(self.helper.cld==0);
             temp[whereinf] = nan
             self.clouds.put_make_var(var,temp)
-        for mask in self.masks.keys():
-            self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].field)/mean_2d(self.masks[mask].field),mask)
+        self.masked_var(var,field)
+    def masked_var(self,var,field):
+        for mask in self.masks.keys():         
+            if 'xe' in allfields[var]:
+                self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].fieldxe)/mean_2d(self.masks[mask].fieldxe),mask)           
+            elif 'ye' in allfields[var]:
+                self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].fieldye)/mean_2d(self.masks[mask].fieldye),mask)  
+            elif 'ze' in allfields[var]:
+                self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].fieldze)/mean_2d(self.masks[mask].fieldze),mask)                      
+            else:
+                self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].field)/mean_2d(self.masks[mask].field),mask)
     def int_var(self,var,field):
         self.stat_int.put_make_var(var,field)
         if 'max' in allfields[var]:
@@ -718,12 +769,6 @@ class dataprocessor(get_variable_class):
         p=self.gv('p')
         qv=self.gq('q',0)
         qc=self.gq('q',1)
-        du=deviation_2d(u)
-        dv=deviation_2d(v)
-        dw=deviation_2d(w)
-        dth=deviation_2d(theta)
-        dqv=deviation_2d(qv)
-        dqt=deviation_2d(qv+qc)
         #exn=(p/psfr)**(rd/cp)
         #t=theta*exn
         self.process_var('U',u)      
@@ -735,20 +780,40 @@ class dataprocessor(get_variable_class):
         self.process_var('THETA',theta) # theta perturbation     
         self.process_var('P',p) # pressure perturbation?
         # variances only produce statistics, not cross-sections     
-        self.stat_var('THETAVAR',dth*dth)    
-        self.stat_var('QTVAR',dqt*dqt)    
-        self.stat_var('QVVAR',dqv*dqv)    
-        self.stat_var('WVAR',dw*dw)      
-        self.stat_var('VVAR',dv*dv)      
+        du=deviation_2d(u)
         self.stat_var('UVAR',du*du)      
+        del du
+        dv=deviation_2d(v)
+        self.stat_var('VVAR',dv*dv)      
+        del dv
+        dw=deviation_2d(w)
+        self.stat_var('WVAR',dw*dw)      
+        del dw
+        dth=deviation_2d(theta)
+        self.stat_var('THETAVAR',dth*dth)    
+        del dth
+        dqv=deviation_2d(qv)
+        self.stat_var('QVVAR',dqv*dqv)    
+        del dqv
+        dqt=deviation_2d(qv+qc)
+        self.stat_var('QTVAR',dqt*dqt)
+        del dqt    
+        dp=deviation_2d(p)
+        self.process_var('DP',dp)
+        del dp       
         # height integrated variables 
         self.int_var('WMIN',self.helper.wmin)      
         self.int_var('WMAX',self.helper.wmax)
-        self.int_var('CLDTOP',nanmax(self.helper.cld*self.clouds.zc[None,None,:],axis=2))      
-        self.int_var('CLDW1TOP',nanmax(self.helper.cldw1*self.clouds.zc[None,None,:],axis=2))      
+        self.int_var('CLDTOP',nanmax(self.helper.cld*self.clouds.zc[None,None,:],axis=2))   
+        self.int_var('CLDW1TOP',nanmax(self.helper.cld*(self.helper.wzc>1.0)*self.clouds.zc[None,None,:],axis=2))
         # domain integrated variables 
         self.dom_var('CC',mean_2d(nanmax(self.helper.cld,axis=2)))      
-        
+        for mask in self.masks.keys():
+            self.samp_1d.put_make_sampvar('frac',mean_2d(self.masks[mask].field),mask)                 
+            self.samp_1d.put_make_sampvar('fracxe',mean_2d(self.masks[mask].fieldxe),mask)           
+            self.samp_1d.put_make_sampvar('fracye',mean_2d(self.masks[mask].fieldye),mask)  
+            self.samp_1d.put_make_sampvar('fracze',mean_2d(self.masks[mask].fieldze),mask)  
+                                
 # process 3d output fields
 def process_3doutput():
     global heighthelper
@@ -758,7 +823,7 @@ def process_3doutput():
         moncdata=Dataset(file_to_process,'r',format='NETCDF4')
         helper.update(moncdata)
         processor.app_tstep(moncdata,helper)
-        print time.clock()-start
+        print 'time is '+str(time.clock()-start)
      
 # replace missing values for reading into ncview
 # and copy to project (storage) directory
@@ -775,7 +840,7 @@ def copy_files_to_project():
                 whereinf=isinf(vardata);
                 vardata[whereinf]=nan
         scratchfiledata.close()
-        print time.clock()-start
+        print 'copying, time is '+str(time.clock()-start)
     for scratchfile in scratchfiles:        
         shutil.copy(scratchfile,projectdir)
     make_tarfile(scratchdir+'clouds.'+case+'.tar',glob.glob(scratchdir+'clouds/clouds.'+case+'*.nc'))
@@ -784,14 +849,8 @@ def copy_files_to_project():
 # update the variables to post-process by level type
 def update_variables():
     global progfields,prevfields,derivedfields,intfields,vertfields,allfields   
-    # make list of derived variables separted from keys
-    progs=progfields.keys()
-    prevs=prevfields.keys()
-    deriveds=derivedfields.keys()
-    ints=intfields.keys()
-    verts=vertfields.keys()
     allfields={}
-    for i in [progfields,prevfields,derivedfields,intfields,vertfields,domfields]:
+    for i in [progfields,prevfields,derivedfields,intfields,vertfields,domfields,fracfields]:
         allfields.update(i)
     alls=allfields.keys()
 

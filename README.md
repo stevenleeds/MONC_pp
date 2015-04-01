@@ -12,8 +12,10 @@
 
 *You should have received a copy of the GNU Lesser General Public License*
 *along with this program.  If not, see <http://www.gnu.org/licenses/>.*
+
 *Copyright (C) 2013-2014 Steven Boeing, ETHZ*
-*Copyright (C) 2015 Steven Boeing, University of Leeds
+
+*Copyright (C) 2015 Steven Boeing, University of Leeds*
 
 **CONTACT**
 
@@ -23,12 +25,16 @@ sjboing (at) "the usual g-mail suffix"
 
 **DESCRIPTION**
 
-This is a collection of scripts for post-processing MONC output
+This is a collection of scripts for post-processing (after-burning) MONC output
 
 This directory includes the following scripts
 * pp_MONC.py: Generic postprocessing for a single case
 * fieldslist.py: Lists of variables to analyze
 * areaspectra.py: code for calculating spectra (thanks Juerg Schmidli, ETHZ)
+
+**REQUIREMENTS**
+
+Python with netcdf4python, numpy and scipy (for embedding C-code with weave)
 
 **OUTPUT FILES**
 
