@@ -45,7 +45,6 @@ prevfields={
 # derived variables (only at current time step)
 derivedfields={
 'T':['temperature',u'K'],
-'EXN':['exner function',u'-'],
 'RHO':['density (including hydrometeors, excluding pressure perturbation effects)',u'kg m-3'],
 'THETAL':['linear liquid water potential temperature',u'K','makespectra'],
 'THETARHO':['density potential temperature (incl hydrometeors)',u'K'],
@@ -69,17 +68,21 @@ derivedfields={
 'TLISEVAR':['variance of liquid ice static energy temperature',u'K2'],
 'THETALVAR':['variance of liquid water potential temperature',u'K2'],
 'BUOYVAR':['variance of buoyancy',u'm2 s-4'],
+'BUOYXVAR':['variance of buoyancy (exl hydrometeors)',u'm2 s-4'],
 'QVVAR':['variance of water vapor',u'-'],
 'QTVAR':['variance of total water',u'-'],
+'RHOWBUOYX':['anelastic buoyancy flux (incl hydrometeors)',u'kg m-1 s-3'],
 'RHOWBUOYX':['anelastic buoyancy flux (excl hydrometeors)',u'kg m-1 s-3'],
 'RHOWTHETA':['anelastic potential temperature flux',u'kg m-2 s-1 K'],
 'RHOWQT':['anelastic total water flux (excl hydrometeors)',u'kg m-2 s-1'],
 'RHOWMSE':['anelastic moist static energy temperature flux',u'kg m-2 s-1 K'],
 'RHOWLISE':['anelastic liquid ice static energy temperature flux',u'kg m-2 s-1 K'],
+'MASSFLX':['anelastic mass flux',u'kg m-2'],
 'TKERES':['resolved TKE',u'm2 s-2'],
 'TKESFS':['subfilter-scale TKE',u'm2 s-2'],
 'KM':['eddy viscosity',u'm-1 s-1'],
 'DP':['pressure perturbation with respect to slab mean',u'Pa'],
+'PGRAD':['pressure gradient term',u'm s-2'],
 }
 
 # vertically integrated/maximum/minimum variables
@@ -113,5 +116,9 @@ domfields={
 # variables with vertical dependence only
 # note that cloud fractions etc are derived by introducing masks
 vertfields={
-'RHO0':['anelatic reference density',u'kg m-3'],
+'RHOREF':['anelastic reference density at p levels',u'kg m-3'],
+'RHOREFH':['anelastic reference density at w levels',u'kg m-3','ze'],
+'EXNREF':['anelastic exner function',u'-'],
+'PREF':['anelastic reference pressure',u'-'],
+'THETAREF':['anelastic reference temperature',u'-'],
 }
