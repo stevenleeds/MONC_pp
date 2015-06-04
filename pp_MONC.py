@@ -106,6 +106,10 @@ if 'see' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
     scratchbase='/scratch/MONCout/'
     projectbase='/nfs/see-fs-01_users/'+myusername+'/MONCout/'
     fullbase='/nfs/see-fs-01_users/'+myusername+'/MONCin/'
+if 'arc2' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
+    scratchbase='/nobackup/'+myusername+'/'
+    projectbase='/home/ufaserv1_h/'+myusername+'/MONCout/'
+    fullbase='/nobackup/'+myusername+'/'
 else: ## E.G. LAPTOP
     fullbase=homedir+'/MONCin/'
     scratchbase=homedir+'/scratch/MONCout/'
@@ -287,6 +291,12 @@ class get_variable_class():
                 return self.data.variables[(key)][:,:,:]
             else:
                 return(self.data.variables[('p')][:,:,:]*nan)          
+    # gref being "get reference variable"
+    def gref(self,key):
+        if key in self.varkeys:
+            return self.data.variables[(key)][:]
+        else:
+            return(self.data.variables[('p')][:]*nan) 
     # gq "get moisture variable"
     def gq(self,key,index):
         if(nboundlines>0):
@@ -330,6 +340,11 @@ class nchelper(object,get_variable_class):
         qci=self.gq('q',nqc)+self.gq('q',nqi) # try to include ice
         self.cld=(qci>1.0e-6)
         self.cloudycolumn=1.0*(sum(self.cld,axis=2)>0)
+        zmin=self.gdim('z')[:-1]
+        zplus=self.gdim('z')[1:]
+        zhalf=0.5*(zmin+zplus)
+        bottom=-zhalf[0]
+        self.zc=hstack(([bottom],zhalf))
                               
 class ncobject(object,get_variable_class):
     # class for writing to netcdf
@@ -740,6 +755,8 @@ class dataprocessor(get_variable_class):
             temp[whereinf] = nan
             self.clouds.put_make_var(var,temp)
         self.masked_var(var,field)
+    def ref_var(self,var,field):
+        self.stat_1d.put_make_var(var,field)
     def masked_var(self,var,field):
         for mask in self.masks.keys():         
             if 'xe' in allfields[var]:
@@ -765,30 +782,60 @@ class dataprocessor(get_variable_class):
         u=self.gv('u')
         v=self.gv('v')
         w=self.gv('w')
-        theta=self.gv('th')
-        p=self.gv('p')
+        deltheta=self.gv('th')
+        thetaref=self.gref('thref')
+        delp=self.gv('p')
         qv=self.gq('q',0)
         qc=self.gq('q',1)
-        #exn=(p/psfr)**(rd/cp)
-        #t=theta*exn
+        pref=self.gref('prefn')
+        p=delp+pref[None,None,:]
+        exn=(pref/psfr)**(rd/cp)
+        theta=thetaref[None,None,:]+deltheta
+        t=theta*exn[None,None,:]
         self.process_var('U',u)      
         self.process_var('V',v)      
         self.process_var('W',w)
         self.process_var('QC',qc)
         self.process_var('QV',qv)
         self.process_var('QT',qc+qv)
-        self.process_var('THETA',theta) # theta perturbation     
-        self.process_var('P',p) # pressure perturbation?
+        self.process_var('THETA',theta)  
+        self.process_var('P',p)
+        self.process_var('T',t)
+        self.process_var('TMSE',t+(grav/cp)*self.helper.zc[None,None,:]+(rlvap/cp)*qv)
+        self.process_var('TLISE',t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qc)
+        rhon=self.gref('rhon')       
+        rho=self.gref('rho')
+        self.ref_var('EXNREF',exn)
+        self.ref_var('RHOREF',rhon)
+        self.ref_var('THETAREF',thetaref)
+        self.ref_var('RHOREFH',rho)
+        thetarhox=theta*(1+(rvord-1)*qv-qc)
+        self.process_var('THETARHOX',thetarhox)
+        buoyx=grav*deviation_2d(thetarhox)/thetaref[None,None,:]
+        self.process_var('BUOYX',buoyx)  
+        dbuoyx=deviation_2d(buoyx)
+        self.stat_var('BUOYXVAR',dbuoyx*dbuoyx)      
+        del dbuoyx
+        del thetarhox,buoyx
+        thetal=theta-(rlvap/(cp*exn))*qc
+        self.process_var('THETAL',thetal) 
+        del thetal
+        qsat=qsa1/(p*exp(qsa2*(t-tk0c)/(t-qsa3))-qsa4) 
+        qsati=qis1/(p*exp(qis2*(t-tk0c)/(t-qis3))-qis4) 
+        self.process_var('QSAT',qsat) 
+        self.process_var('QSATI',qsati) 
+        self.process_var('RH',(qc+qv)/qsat)
+        self.process_var('RHI',(qc+qv)/qsati) 
+        del qsat,qsati
         # variances only produce statistics, not cross-sections     
         du=deviation_2d(u)
         self.stat_var('UVAR',du*du)      
-        del du
         dv=deviation_2d(v)
         self.stat_var('VVAR',dv*dv)      
-        del dv
         dw=deviation_2d(w)
         self.stat_var('WVAR',dw*dw)      
-        del dw
+        self.stat_var('TKERES',du*du+dv*dv+dw*dw)
+        del du,dv,dw
         dth=deviation_2d(theta)
         self.stat_var('THETAVAR',dth*dth)    
         del dth
@@ -873,7 +920,7 @@ if __name__ == "__main__":
     global case,exper
     case=sys.argv[1]
     exper=sys.argv[2]
-    fulldir=fullbase+case+'/'
+    fulldir=fullbase+case+'/output/'
     scratchdir=scratchbase+case+'/'
     projectdir=projectbase+case+'/'
     runme()
