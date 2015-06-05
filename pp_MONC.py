@@ -826,7 +826,15 @@ class dataprocessor(get_variable_class):
         dbuoyx=deviation_2d(buoyx)
         self.stat_var('BUOYXVAR',dbuoyx*dbuoyx)      
         del dbuoyx
-        del thetarhox,buoyx
+        del thetarhox
+        dp=deviation_2d(p)
+        self.process_var('DP',dp)
+        zeroxy=0.0*dp[:,:,0][:,:,None]
+        pgrad=(1./rho[None,None,:])*(concatenate((zeroxy,(dp[:,:,2:]-dp[:,:,:-2])/(self.helper.zc[None,None,2:]-self.helper.zc[None,None,:-2]),zeroxy),axis=2))
+        self.process_var('PGRAD',pgrad)
+        del dp
+        self.process_var('BMINP',concatenate((zeroxy,buoyx[:,:,1:-1]-pgrad[:,:,1:-1],zeroxy),axis=2))
+        del pgrad,buoyx      
         thetal=theta-(rlvap/(cp*exn))*qc
         self.process_var('THETAL',thetal) 
         del thetal
@@ -855,9 +863,6 @@ class dataprocessor(get_variable_class):
         dqt=deviation_2d(qv+qc)
         self.stat_var('QTVAR',dqt*dqt)
         del dqt    
-        dp=deviation_2d(p)
-        self.process_var('DP',dp)
-        del dp       
         # height integrated variables 
         self.int_var('WMIN',self.helper.wmin)      
         self.int_var('WMAX',self.helper.wmax)
@@ -877,20 +882,27 @@ def process_3doutput():
     global heighthelper
     helper=nchelper()
     processor=dataprocessor()
+    print 'performing data check'
     for file_to_process in filelist['3ddump']:
         print file_to_process
         moncdata=Dataset(file_to_process,'r',format='NETCDF4')
+        moncdata.close()
+    for file_to_process in filelist['3ddump']:
+        print 'processing '+file_to_process
+        moncdata=Dataset(file_to_process,'r',format='NETCDF4')
         helper.update(moncdata)
         processor.app_tstep(moncdata,helper)
-        print 'time is '+str(time.clock()-start)
-     
+        print 'cpu time is '+str(time.clock()-start)
+        moncdata.close()
+
 # replace missing values for reading into ncview
 # and copy to project (storage) directory
 def copy_files_to_project():
     scratchfiles=glob.glob(scratchdir+'*'+case+'*.nc')
     scratchfilescloud=glob.glob(scratchdir+'clouds/clouds.'+case+'*.nc')
     for scratchfile in scratchfiles+scratchfilescloud:
-        print scratchfile
+        print 'revising '+scratchfile
+        print 'cpu time is '+str(time.clock()-start)
         scratchfiledata=Dataset(scratchfile,'r+',format='NETCDF4')
         for var in scratchfiledata.variables:
             if(type(scratchfiledata.variables[(var)])==numpy.ma.masked_array):
@@ -899,8 +911,9 @@ def copy_files_to_project():
                 whereinf=isinf(vardata);
                 vardata[whereinf]=nan
         scratchfiledata.close()
-        print 'copying, time is '+str(time.clock()-start)
-    for scratchfile in scratchfiles:        
+    for scratchfile in scratchfiles:
+        print 'copying scratch file '+scratchfile+' to '+projectdir
+        print 'cpu time is '+str(time.clock()-start)
         shutil.copy(scratchfile,projectdir)
     make_tarfile(scratchdir+'clouds.'+case+'.tar',glob.glob(scratchdir+'clouds/clouds.'+case+'*.nc'))
     shutil.copy(scratchdir+'clouds.'+case+'.tar',projectdir)

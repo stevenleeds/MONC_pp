@@ -83,6 +83,7 @@ derivedfields={
 'KM':['eddy viscosity',u'm-1 s-1'],
 'DP':['pressure perturbation with respect to slab mean',u'Pa'],
 'PGRAD':['pressure gradient term',u'm s-2'],
+'BMINP':['bouyancy minus pressure gradient term',u'm s-2'],
 }
 
 # vertically integrated/maximum/minimum variables
