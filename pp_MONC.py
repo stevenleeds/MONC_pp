@@ -106,10 +106,14 @@ if 'see' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
     scratchbase='/scratch/MONCout/'
     projectbase='/nfs/see-fs-01_users/'+myusername+'/MONCout/'
     fullbase='/nfs/see-fs-01_users/'+myusername+'/MONCin/'
-if 'arc2' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
-    scratchbase='/nobackup/'+myusername+'/'
+elif 'arc2' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
+    scratchbase='/nobackup/'+myusername+'/MONCout/'
     projectbase='/home/ufaserv1_h/'+myusername+'/MONCout/'
     fullbase='/nobackup/'+myusername+'/'
+elif 'monsoon-metoffice' in hostname: ## Met Office monsoon
+    scratchbase='/scratch/'+myusername+'/MONCout/'
+    projectbase='/projects/udmonc/'+myusername+'/MONCout/'
+    fullbase='/scratch/'+myusername+'/'
 else: ## E.G. LAPTOP
     fullbase=homedir+'/MONCin/'
     scratchbase=homedir+'/scratch/MONCout/'
@@ -135,6 +139,10 @@ qis1 = 3.8         # Numerator in equation to calculate qsat
 qis2 = -21.8745584 # Constant in qisat equation
 qis3 = 7.66        # Constant in qisat equation
 qis4 = 6.109       # Constant in qisat equation 
+
+
+iforce_x=1
+iforce_y=1
 
 start=time.clock()
 numpy.seterr(invalid='ignore') # don't wine about nans
@@ -163,7 +171,8 @@ def make_filelist():
     for i in types:
         filelist[i]=glob.glob(fulldir+types[i])
         filelist[i].sort() 
-        
+        filelist[i].sort(key=len)       
+ 
 # create a tarfile (for cloud fields)
 def make_tarfile(output_filename, infiles):
     with closing(tarfile.open(output_filename,'w')) as tar:
@@ -188,7 +197,8 @@ class mask:
 # that match sampling criteria
 # this is for y-direction geometry
 # uses C-code (weave) for speed
-def prepare_spectra_y(dataout,data,imax,jmax,kmin,kmax):
+def prepare_spectra_y(dataout,data,imax,jmax,kmin,kmax,force=0):
+    global iforce_y
     code = """
     int i, j, k, nsegments;
     nsegments=0;
@@ -201,10 +211,10 @@ def prepare_spectra_y(dataout,data,imax,jmax,kmin,kmax):
         }     
     }
     """
-    weave.inline(code,['dataout','data','imax','jmax','kmin','kmax'],type_converters=converters.blitz,compiler='gcc')
+    weave.inline(code,['dataout','data','imax','jmax','kmin','kmax'],type_converters=converters.blitz,compiler='gcc',force=force)
 
 # The spectra with along x-direction
-def prepare_spectra_x(dataout,data,imax,jmax,kmin,kmax):
+def prepare_spectra_x(dataout,data,imax,jmax,kmin,kmax,force=0):
     code = """
     int i, j, k, nsegments;
     nsegments=0;
@@ -217,8 +227,8 @@ def prepare_spectra_x(dataout,data,imax,jmax,kmin,kmax):
         }     
     }
     """
-    weave.inline(code,['dataout','data','imax','jmax','kmin','kmax'],type_converters=converters.blitz,compiler='gcc')
-             
+    weave.inline(code,['dataout','data','imax','jmax','kmin','kmax'],type_converters=converters.blitz,compiler='gcc',force=force)
+         
 # mean value across 2d slab
 def mean_2d(inputfield):
     meanfield=mean(mean(inputfield,axis=1, dtype=numpy.float64),axis=0, dtype=numpy.float64)
@@ -345,7 +355,8 @@ class nchelper(object,get_variable_class):
         zhalf=0.5*(zmin+zplus)
         bottom=-zhalf[0]
         self.zc=hstack(([bottom],zhalf))
-                              
+
+# a class for netcdf output                              
 class ncobject(object,get_variable_class):
     # class for writing to netcdf
     def __init__(self,outfile,description,logical=True):
@@ -584,6 +595,7 @@ class statgroupspectra(ncobject):
     def __init__(self,outfile,description):
         super(statgroupspectra,self).__init__(outfile,description,lspec)
         self.initiated=False
+        self.force=1
     def put_make_var(self,var,field):
         if self.active:
             for specbounds in spectralevels:
@@ -595,12 +607,13 @@ class statgroupspectra(ncobject):
                 if self.direction=='y':
                     nsegmentsmax=shape(field)[0]*(specupper-speclower)   
                     dataout=zeros((nsegmentsmax,shape(field)[1]))
-                    prepare_spectra_y(dataout,field,shape(field)[0],shape(field)[1],speclower,specupper)
+                    prepare_spectra_y(dataout,field,shape(field)[0],shape(field)[1],speclower,specupper,self.force)
                 elif self.direction=='x':
                     nsegmentsmax=shape(field)[1]*(specupper-speclower)   
                     dataout=zeros((nsegmentsmax,shape(field)[0]))
-                    prepare_spectra_x(dataout,field,shape(field)[0],shape(field)[1],speclower,specupper)
+                    prepare_spectra_x(dataout,field,shape(field)[0],shape(field)[1],speclower,specupper,self.force)
                 (p,wavenr)=areaspectra.spectrum_peri(dataout, Fs=1/self.dgrid, pad=False, smooth=False,rmzf=True,scale_by_freq=True)
+                self.force=0
                 if(self.initiated==False):
                     self.init_dim('wavenr','wave number [m-1]',wavenr)
                     self.initiated=True
@@ -758,6 +771,8 @@ class dataprocessor(get_variable_class):
     def ref_var(self,var,field):
         self.stat_1d.put_make_var(var,field)
     def masked_var(self,var,field):
+        if not lsamp:
+            return
         for mask in self.masks.keys():         
             if 'xe' in allfields[var]:
                 self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].fieldxe)/mean_2d(self.masks[mask].fieldxe),mask)           
@@ -851,15 +866,16 @@ class dataprocessor(get_variable_class):
         # height integrated variables 
         self.int_var('WMIN',self.helper.wmin)      
         self.int_var('WMAX',self.helper.wmax)
-        self.int_var('CLDTOP',nanmax(self.helper.cld*self.clouds.zc[None,None,:],axis=2))   
-        self.int_var('CLDW1TOP',nanmax(self.helper.cld*(self.helper.wzc>1.0)*self.clouds.zc[None,None,:],axis=2))
+        self.int_var('CLDTOP',nanmax(self.helper.cld*self.helper.zc[None,None,:],axis=2))   
+        self.int_var('CLDW1TOP',nanmax(self.helper.cld*(self.helper.wzc>1.0)*self.helper.zc[None,None,:],axis=2))
         # domain integrated variables 
         self.dom_var('CC',mean_2d(nanmax(self.helper.cld,axis=2)))      
-        for mask in self.masks.keys():
-            self.samp_1d.put_make_sampvar('frac',mean_2d(self.masks[mask].field),mask)                 
-            self.samp_1d.put_make_sampvar('fracxe',mean_2d(self.masks[mask].fieldxe),mask)           
-            self.samp_1d.put_make_sampvar('fracye',mean_2d(self.masks[mask].fieldye),mask)  
-            self.samp_1d.put_make_sampvar('fracze',mean_2d(self.masks[mask].fieldze),mask)  
+        if lsamp:
+            for mask in self.masks.keys():
+               self.samp_1d.put_make_sampvar('frac',mean_2d(self.masks[mask].field),mask)                 
+               self.samp_1d.put_make_sampvar('fracxe',mean_2d(self.masks[mask].fieldxe),mask)           
+               self.samp_1d.put_make_sampvar('fracye',mean_2d(self.masks[mask].fieldye),mask)  
+               self.samp_1d.put_make_sampvar('fracze',mean_2d(self.masks[mask].fieldze),mask)  
                                 
 # process 3d output fields
 def process_3doutput():
@@ -867,6 +883,7 @@ def process_3doutput():
     helper=nchelper()
     processor=dataprocessor()
     for file_to_process in filelist['3ddump']:
+        print file_to_process
         moncdata=Dataset(file_to_process,'r',format='NETCDF4')
         helper.update(moncdata)
         processor.app_tstep(moncdata,helper)
