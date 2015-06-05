@@ -140,10 +140,6 @@ qis2 = -21.8745584 # Constant in qisat equation
 qis3 = 7.66        # Constant in qisat equation
 qis4 = 6.109       # Constant in qisat equation 
 
-
-iforce_x=1
-iforce_y=1
-
 start=time.clock()
 numpy.seterr(invalid='ignore') # don't wine about nans
 
@@ -198,7 +194,6 @@ class mask:
 # this is for y-direction geometry
 # uses C-code (weave) for speed
 def prepare_spectra_y(dataout,data,imax,jmax,kmin,kmax,force=0):
-    global iforce_y
     code = """
     int i, j, k, nsegments;
     nsegments=0;
