@@ -26,7 +26,7 @@
 # masks can also be used to average over pre-selected subdomain (e.g. a box)
 # but currently such domains are not implemented
 # outputs to a zipped file which is saved with f4 precision (to reduce file size)
-# and further reduced precision for in-cloud variables
+# and further reduced precision for in-cloud 3d variables
 
 # Requires python with netcdf4python, numpy and scipy (for embedding C-code with weave)
 
@@ -44,6 +44,9 @@
 # DISCUSS MOMENTUM, ENERGY, VORTICITY, HELICITY AND "PRESSURE LAPLACIAN" BUDGET TOOLS
 # ADD AN OPTION PARSER?
 # TAKE STAGGERING/WEIGHTING INTO ACCOUNT TO PRODUCE SPECTRA AT THE SAME LEVELS FOR W AND OTHER VARIABLES?
+# ADD SURFACE TEMPERATURES, ADD TO BUOYANCY
+
+## IMPORTS
 
 from numpy import *
 from netCDF4 import Dataset
@@ -63,7 +66,7 @@ import getpass
 import numpy
 import socket
    
-nboundlines=0 # Option to crop the boundaries in the horizontal plane
+## SETTINGS
 
 loadmpl=False # Load matplotlib
 lzlib=True # Compress output using zlib?
@@ -79,7 +82,6 @@ lclouds=True # Produce tar-ball with 3D cloud and precipitation fields for stora
 
 # where to take cross sections (currently just grid numbers, i.e., no interpolation)
 # has to be an array
-
 xsel=[0]
 ysel=[0]
 zsel=[0,1,10,20,30]
@@ -90,14 +92,24 @@ spectralevels=[
 [20,30],
 ]
 
-nqc=1 # q number corresponding to cloud droplet liquid water
+# Moisture vairables
+# Negative numbers can be used to ignore species
+nqv=0  # q number corresponding to water vapor
+nqc=1  # q number corresponding to cloud droplet liquid water
 nqi=-1 # q number corresponding to cloud ice
+nqs=-1 # q number corresponding to snow
+nqg=-1 # q number corresponding to graupel
+nqh=-1 # q number corresponding to hail
+
+# Option to crop the boundaries in the horizontal plane
+nboundlines=0
+
+## FILE PATHS
 
 myusername=getpass.getuser()
 hostname=socket.gethostname()
 homedir = os.environ['HOME']
 
-## STORAGE LOCATIONS
 # fullbase: standard location of input directories
 # scratchbase: location of scratch space where initial postprocessing is done
 # localbase: location where final files are stored
@@ -114,12 +126,13 @@ elif 'monsoon-metoffice' in hostname: ## Met Office monsoon
     scratchbase='/scratch/'+myusername+'/MONCout/'
     projectbase='/projects/udmonc/'+myusername+'/MONCout/'
     fullbase='/scratch/'+myusername+'/'
-else: ## E.G. LAPTOP
+else: ## e.g. laptop
     fullbase=homedir+'/MONCin/'
     scratchbase=homedir+'/scratch/MONCout/'
     projectbase=homedir+'/proj/MONCout/'
     
-# Some MONC constants for calculations of derived variables
+##  MONC CONSTANTS FOR DERIVED VARIABLES
+
 psfr=1.0e5 # reference pressure
 rd=287.05 # gas constant, dry air
 rvord=1.608 # ratio of gas constants (water vapor/dry air)
@@ -143,13 +156,10 @@ qis4 = 6.109       # Constant in qisat equation
 start=time.clock()
 numpy.seterr(invalid='ignore') # don't wine about nans
 
-# currently not used, but may be useful when analysing problems
-if loadmpl:
-    import matplotlib
-    matplotlib.use('agg') # first define agg output, then continue to load rest of matplotlib and pyplot 
-    from matplotlib import *
-    from matplotlib.pyplot import *
-    
+## CODE TO PROCESS
+
+## FUNCTIONS (PART 1)
+
 # forced makedir
 def mkdir_p(path):
     try:
@@ -175,19 +185,7 @@ def make_tarfile(output_filename, infiles):
         for infile in infiles:
             tar.add(infile)
                           
-# class for masks/conditional sampling
-class mask:
-    def __init__(self):
-        pass
-    def setfield(self,field):
-        self.field=field
-    def setfieldxe(self,field):
-        self.fieldxe=field
-    def setfieldye(self,field):
-        self.fieldye=field
-    def setfieldze(self,field):
-        self.fieldze=field
-                                             
+                                            
 # prepare spectral data into 2d arrays
 # containing stretches along all points 
 # that match sampling criteria
@@ -281,7 +279,22 @@ def var_from_file(dataset,key):
             return dataset.variables[(key)][:,:,:]
         except:
             return(nan)
-            
+
+## CLASSES
+
+# class for masks/conditional sampling
+class mask:
+    def __init__(self):
+        pass
+    def setfield(self,field):
+        self.field=field
+    def setfieldxe(self,field):
+        self.fieldxe=field
+    def setfieldye(self,field):
+        self.fieldye=field
+    def setfieldze(self,field):
+        self.fieldze=field
+	            
 # a class to include some methods needed for both the help-variable class (which store temp variables) and the netcdf class
 class get_variable_class():
     # gv being "get variable"
@@ -314,7 +327,10 @@ class get_variable_class():
                 return(self.data.variables[('p')][nboundlines:-nboundlines,nboundlines:-nboundlines,:]*nan)
         else:
             if key in self.varkeys:
-                return self.data.variables[(key)][index,:,:,:]
+                if index<len(self.data.variables[(key)]):
+                    return self.data.variables[(key)][index,:,:,:]
+                else:
+                    return zeros(shape(self.data.variables[(key)][0]))
             else:
                 return(self.data.variables[('p')][:,:,:]*nan)    
     # gdim being "get dimension"
@@ -350,6 +366,16 @@ class nchelper(object,get_variable_class):
         zhalf=0.5*(zmin+zplus)
         bottom=-zhalf[0]
         self.zc=hstack(([bottom],zhalf))
+        deltheta=self.gv('th')
+        thetaref=self.gref('thref')
+        qv=self.gq('q',0)      
+        theta=thetaref[None,None,:]+deltheta
+        del deltheta
+        thetarhox=theta*(1+(rvord-1)*qv-qci)   
+        self.dthetarhox=deviation_2d(thetarhox)
+        del thetarhox
+        dthetarhoxminus=dstack((self.dthetarhox[:,:,0],self.dthetarhox[:,:,:-1]))
+        self.dthetarhoxze=0.5*(self.dthetarhox+dthetarhoxminus)
 
 # a class for netcdf output                              
 class ncobject(object,get_variable_class):
@@ -675,7 +701,7 @@ class dataprocessor(get_variable_class):
         self.spec_x=statgroupspectra_x('spec_x.'+case+'.nc','MONC spectra along the x-direction')
         self.spec_y=statgroupspectra_y('spec_y.'+case+'.nc','MONC spectra along the y-direction')
         if lsamp:
-            self.init_masks(['cld','cldupd','cldupdw1','upd'])
+            self.init_masks(['cld','cldupd','cldupdw1','upd','buoyx','cldbuoyx'])
     def calc_masks(self):
         if lsamp:
             w=self.gv('w')
@@ -684,24 +710,34 @@ class dataprocessor(get_variable_class):
             self.masks['cldupd'].setfieldze(cldze*(w>0.0))
             self.masks['cldupdw1'].setfieldze(cldze*(w>1.0))
             self.masks['upd'].setfieldze((w>0.0))
+            self.masks['buoyx'].setfieldze((self.helper.dthetarhoxze>0.0))
+            self.masks['cldbuoyx'].setfieldze((self.helper.dthetarhoxze>0.0)*cldze)
             del cldze
             self.masks['cld'].setfield(self.helper.cld)
             self.masks['cldupd'].setfield(self.helper.cld*(self.helper.wzc>0.0))
             self.masks['cldupdw1'].setfield(self.helper.cld*(self.helper.wzc>1.0))
             self.masks['upd'].setfield((self.helper.wzc>0.0))
+            self.masks['buoyx'].setfield((self.helper.dthetarhox>0.0))
+            self.masks['cldbuoyx'].setfield((self.helper.dthetarhox>0.0)*self.helper.cld)
             cldxe=self.helper.cld # should be updated with interpolated saturation deficit
             wxe=0.5*(self.helper.wzc[:,:,:]+vstack((self.helper.wzc[-1,:,:][None,:,:],self.helper.wzc[:-1,:,:])))
+            dthetarhoxxe=0.5*(self.helper.dthetarhox[:,:,:]+vstack((self.helper.dthetarhox[-1,:,:][None,:,:],self.helper.dthetarhox[:-1,:,:])))
             self.masks['cld'].setfieldxe(cldxe)
             self.masks['cldupd'].setfieldxe(cldxe*(wxe>0.0))
             self.masks['cldupdw1'].setfieldxe(cldxe*(wxe>1.0))
             self.masks['upd'].setfieldxe((wxe>0.0))
-            del cldxe,wxe
+            self.masks['buoyx'].setfieldxe((dthetarhoxxe>0.0))
+            self.masks['cldbuoyx'].setfieldxe((dthetarhoxxe>0.0)*cldxe)
+            del cldxe,wxe,dthetarhoxxe
             cldye=self.helper.cld # should be updated with interpolated saturation deficit
             wye=0.5*(self.helper.wzc[:,:,:]+hstack((self.helper.wzc[:,-1,:][:,None,:],self.helper.wzc[:,:-1,:])))
+            dthetarhoxye=0.5*(self.helper.dthetarhox[:,:,:]+hstack((self.helper.dthetarhox[:,-1,:][:,None,:],self.helper.dthetarhox[:,:-1,:])))
             self.masks['cld'].setfieldye(cldye)
             self.masks['cldupdw1'].setfieldye(cldye*(wye>1.0))
             self.masks['cldupd'].setfieldye(cldye*(wye>0.0))
             self.masks['upd'].setfieldye((wye>0.0))
+            self.masks['buoyx'].setfieldye((dthetarhoxye>0.0))
+            self.masks['cldbuoyx'].setfieldye((dthetarhoxye>0.0)*cldye)
     def init_masks(self,masks):
         self.masks={}
         for maskname in masks:
@@ -795,8 +831,10 @@ class dataprocessor(get_variable_class):
         deltheta=self.gv('th')
         thetaref=self.gref('thref')
         delp=self.gv('p')
-        qv=self.gq('q',0)
-        qc=self.gq('q',1)
+        qv=self.gq('q',nqv)
+        qc=self.gq('q',nqc)
+        qi=self.gq('q',nqi)
+	qci=qc+qi
         pref=self.gref('prefn')
         p=delp+pref[None,None,:]
         exn=(pref/psfr)**(rd/cp)
@@ -807,19 +845,19 @@ class dataprocessor(get_variable_class):
         self.process_var('W',w)
         self.process_var('QC',qc)
         self.process_var('QV',qv)
-        self.process_var('QT',qc+qv)
+        self.process_var('QT',qci+qv)
         self.process_var('THETA',theta)  
         self.process_var('P',p)
         self.process_var('T',t)
-        self.process_var('TMSE',t+(grav/cp)*self.helper.zc[None,None,:]+(rlvap/cp)*qv)
-        self.process_var('TLISE',t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qc)
+        self.process_var('TMSE',t+(grav/cp)*self.helper.zc[None,None,:]+(rlvap/cp)*qv-((rlsub-rlvap)/cp)*qi)
+        self.process_var('TLISE',t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qc-(rlsub/cp)*qi)
         rhon=self.gref('rhon')       
         rho=self.gref('rho')
         self.ref_var('EXNREF',exn)
         self.ref_var('RHOREF',rhon)
         self.ref_var('THETAREF',thetaref)
         self.ref_var('RHOREFH',rho)
-        thetarhox=theta*(1+(rvord-1)*qv-qc)
+        thetarhox=theta*(1+(rvord-1)*qv-qci)
         self.process_var('THETARHOX',thetarhox)
         buoyx=grav*deviation_2d(thetarhox)/thetaref[None,None,:]
         self.process_var('BUOYX',buoyx)  
@@ -835,15 +873,15 @@ class dataprocessor(get_variable_class):
         del dp
         self.process_var('BMINP',concatenate((zeroxy,buoyx[:,:,1:-1]-pgrad[:,:,1:-1],zeroxy),axis=2))
         del pgrad,buoyx      
-        thetal=theta-(rlvap/(cp*exn))*qc
+        thetal=theta-(rlvap/(cp*exn))*qc-(rlsub/(cp*exn))*qi
         self.process_var('THETAL',thetal) 
         del thetal
         qsat=qsa1/(p*exp(qsa2*(t-tk0c)/(t-qsa3))-qsa4) 
         qsati=qis1/(p*exp(qis2*(t-tk0c)/(t-qis3))-qis4) 
         self.process_var('QSAT',qsat) 
         self.process_var('QSATI',qsati) 
-        self.process_var('RH',(qc+qv)/qsat)
-        self.process_var('RHI',(qc+qv)/qsati) 
+        self.process_var('RH',(qci+qv)/qsat)
+        self.process_var('RHI',(qci+qv)/qsati) 
         del qsat,qsati
         # variances only produce statistics, not cross-sections     
         du=deviation_2d(u)
@@ -876,6 +914,8 @@ class dataprocessor(get_variable_class):
                self.samp_1d.put_make_sampvar('fracxe',mean_2d(self.masks[mask].fieldxe),mask)           
                self.samp_1d.put_make_sampvar('fracye',mean_2d(self.masks[mask].fieldye),mask)  
                self.samp_1d.put_make_sampvar('fracze',mean_2d(self.masks[mask].fieldze),mask)  
+
+## FUNCTIONS (PART 2)
                                 
 # process 3d output fields
 def process_3doutput():
@@ -927,6 +967,7 @@ def update_variables():
     alls=allfields.keys()
 
 ########### MAIN PROGRAM ########### 
+
 def runme():
     update_variables()
     mkdir_p(scratchdir)
@@ -935,6 +976,13 @@ def runme():
     make_filelist()
     process_3doutput()
     copy_files_to_project()
+
+# currently not used, but may be useful when analysing problems
+if loadmpl:
+    import matplotlib
+    matplotlib.use('agg') # first define agg output, then continue to load rest of matplotlib and pyplot 
+    from matplotlib import *
+    from matplotlib.pyplot import *
 
 # ACTUALLY CALLS THE SCRIPT FROM THE COMMAND LINE
 # Using the construction with
