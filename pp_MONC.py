@@ -52,6 +52,7 @@ from numpy import *
 from netCDF4 import Dataset
 from scipy import weave # to embed code in C
 from scipy.weave import converters
+from scipy.interpolate import splrep,spalde
 from fieldslist import * # a separate file contains the actual variable list
 from contextlib import closing
 import sys # system functions
@@ -157,6 +158,26 @@ start=time.clock()
 numpy.seterr(invalid='ignore') # don't wine about nans
 
 ## CODE TO PROCESS
+
+##  EXTRA DECLARATIONS FOR FAST SATURATION PHYSICS
+
+numpsatarr=zeros(350,double) # saturation pressure values numerator array
+denpsatarr=zeros(350,double) # saturation pressure values denominator array
+psatarr=zeros(350,double) # saturation pressure values denominator array
+
+psatarrabc=zeros((3,350),double) # saturation pressure spline array
+
+for i in range(350):
+    numpsatarr[i]=qsa1/(0.01*exp(qsa2*(i-tk0c)/(i-qsa3)))  
+    denpsatarr[i]=qsa4/(0.01*exp(qsa2*(i-tk0c)/(i-qsa3)))
+    psatarr[i]=0.01*exp(qsa2*(i-tk0c)/(i-qsa3))
+
+psatspline = splrep(range(150,350),psatarr[150:350], k=2)
+splinecoeffs=spalde(range(150,350),psatspline)
+for i in range(150,350):
+   psatarrabc[0,i]=splinecoeffs[i-150][0]
+   psatarrabc[1,i]=splinecoeffs[i-150][1]
+   psatarrabc[2,i]=splinecoeffs[i-150][2]
 
 ## FUNCTIONS (PART 1)
 
@@ -280,6 +301,134 @@ def var_from_file(dataset,key):
         except:
             return(nan)
 
+def fastmoistphysics(tlisein,qtin,z,p,force=0):
+    support = """
+    #include <math.h>
+    #include <stdio.h>
+    """
+    imax=shape(tlisein)[0]
+    jmax=shape(tlisein)[1]
+    kmax=shape(tlisein)[2]
+    qc=zeros((imax,jmax,kmax),float32)
+    tv=zeros((imax,jmax,kmax),float32)
+    code = """
+    int const imax="""+str(imax)+""";
+    int const jmax="""+str(jmax)+""";
+    int const kmax="""+str(kmax)+""";
+    double const cp=1005.0;
+    double const rlvap=2.501e6;
+    double const G=9.81;
+    double const rvrd=1.608;
+    double const invrlvap=1.0/rlvap;
+    double const invcp=1.0/cp;
+    double const qsa1 = 3.8;
+    double const qsa4 = 6.109;
+    
+    int niter;
+    bool lunsat;
+    double zt, ztold, zttry, zqt, ztlise, zz, zp;
+    double znumpint, zdenpint, zpsat, zqsat;
+    double zqc, ztv;
+    double ztliseguess,ztliseguesstry;
+    int ztint;
+    
+    for (int i=0; i<imax; ++i) {
+    for (int j=0; j<jmax; ++j) {
+    for (int k=1; k<kmax; ++k) {
+      ztlise=tlisein(i,j,k);
+      zqt=qtin(i,j,k);
+      zz=z(k);
+      zp=p(k);
+      
+      // start loop
+      lunsat=true;
+            
+      //first temperature guess: dry parcel
+      zt=ztlise-(G*invcp)*zz;
+      ztint=std::min(int(zt),349);
+      znumpint=numpsatarr(ztint);
+      zdenpint=denpsatarr(ztint);
+      
+      if(zqt*(zp-zdenpint)>znumpint) {
+        lunsat=false; // definitely unsaturated
+      }
+      if(lunsat==false) {
+        zpsat=psatarrabc(0,ztint)+(zt-ztint)*psatarrabc(1,ztint)+0.5*(zt-ztint)*(zt-ztint)*psatarrabc(2,ztint);
+        if(not(zqt*(zp*zpsat-qsa4)>qsa1)) {
+          lunsat=true; // definitely unsaturated
+        }        
+      }
+     
+      // the long saturation loop is needed: jaiks
+      if(lunsat==false) {
+       
+         ztold=zt;
+         niter=0;
+         zqsat=qsa1/(zp*zpsat-qsa4);
+         ztliseguess=zt+(G*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);
+                  
+         // Calculate Newton-Raphson iteration at perturbed temperature
+         // Follow the saturation curves at the previous temperature
+         zttry=zt-0.002;
+
+         zpsat=zpsat-0.002*psatarrabc(1,ztint)+0.5*4.0e-6*psatarrabc(2,ztint);
+         zqsat=qsa1/(zp*zpsat-qsa4);
+         ztliseguesstry =zttry+(G*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);
+         
+         zt = std::min(std::max(ztlise-(G*invcp)*zz,zt-(ztliseguess-ztlise)/((ztliseguess-ztliseguesstry)*500.0)),ztlise-(G*invcp)*zz+(rlvap*invcp)*zqt);
+                  
+         while((std::abs(zt-ztold) > 0.002) and (niter<40)) {
+           niter = niter+1;
+           ztold=zt;
+           ztint=std::min(int(zt),349);
+           zpsat=psatarrabc(0,ztint)+(zt-ztint)*psatarrabc(1,ztint)+0.5*(zt-ztint)*(zt-ztint)*psatarrabc(2,ztint);
+           zqsat=qsa1/(zp*zpsat-qsa4);
+           ztliseguess=zt+(G*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);
+                    
+           // Calculate Newton-Raphson iteration at perturbed temperature
+           // Follow the saturation curves at the previous temperature
+           zttry=zt-0.002;
+           zpsat=zpsat-0.002*psatarrabc(1,ztint)+0.5*4.0e-6*psatarrabc(2,ztint);
+           zqsat=qsa1/(zp*zpsat-qsa4);
+           ztliseguesstry =zttry+(G*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);                
+
+           zt = std::min(std::max(ztlise-(G*invcp)*zz,zt-(ztliseguess-ztlise)/((ztliseguess-ztliseguesstry)*500.0)),ztlise-(G*invcp)*zz+(rlvap*invcp)*zqt);
+        }
+                 
+        zqc=cp*invrlvap*(zt-ztlise+(G*invcp)*zz);
+        
+        if(zqc>0.0) {
+          // moist parcel, adjust qc
+          // conservation of lise, qt
+          ztv=zt*(1.0+(rvrd-1.0)*(zqt-zqc)-zqc);
+        }        
+        else {
+          // parcel is dry after all, see below
+          lunsat=true;
+        }       
+      }
+      
+      if(lunsat==true) {
+        ztv=zt*(1.0+(rvrd-1.0)*zqt);
+        zqc=0.0;
+      }
+      
+      tv(i,j,k)=ztv;
+      qc(i,j,k)=zqc;
+    }
+    }
+    }
+
+    for (int i=0; i<imax; ++i) {
+    for (int j=0; j<jmax; ++j) {
+      tv(i,j,0)=tv(i,j,1);
+      qc(i,j,0)=0.0;
+    }
+    }
+    """
+    weave.inline(code, ['tlisein','qtin','p','z','tv','qc','numpsatarr','denpsatarr','psatarrabc'],type_converters = converters.blitz,support_code=support,compiler='gcc',force=force)
+    return tv,qc
+    
 ## CLASSES
 
 # class for masks/conditional sampling
@@ -314,7 +463,7 @@ class get_variable_class():
         if key in self.varkeys:
             return self.data.variables[(key)][:]
         else:
-            return(self.data.variables[('p')][:]*nan) 
+            return(self.data.variables[('pref')][:]*nan) 
     # gq "get moisture variable"
     def gq(self,key,index):
         if(nboundlines>0):
@@ -366,16 +515,6 @@ class nchelper(object,get_variable_class):
         zhalf=0.5*(zmin+zplus)
         bottom=-zhalf[0]
         self.zc=hstack(([bottom],zhalf))
-        deltheta=self.gv('th')
-        thetaref=self.gref('thref')
-        qv=self.gq('q',0)      
-        theta=thetaref[None,None,:]+deltheta
-        del deltheta
-        thetarhox=theta*(1+(rvord-1)*qv-qci)   
-        self.dthetarhox=deviation_2d(thetarhox)
-        del thetarhox
-        dthetarhoxminus=dstack((self.dthetarhox[:,:,0],self.dthetarhox[:,:,:-1]))
-        self.dthetarhoxze=0.5*(self.dthetarhox+dthetarhoxminus)
 
 # a class for netcdf output                              
 class ncobject(object,get_variable_class):
@@ -702,42 +841,86 @@ class dataprocessor(get_variable_class):
         self.spec_y=statgroupspectra_y('spec_y.'+case+'.nc','MONC spectra along the y-direction')
         if lsamp:
             self.init_masks(['cld','cldupd','cldupdw1','upd','buoyx','cldbuoyx'])
+        self.force=1
     def calc_masks(self):
         if lsamp:
-            w=self.gv('w')
-            cldze=self.helper.cld # should be updated with interpolated saturation deficit
-            self.masks['cld'].setfieldze(cldze)
-            self.masks['cldupd'].setfieldze(cldze*(w>0.0))
-            self.masks['cldupdw1'].setfieldze(cldze*(w>1.0))
-            self.masks['upd'].setfieldze((w>0.0))
-            self.masks['buoyx'].setfieldze((self.helper.dthetarhoxze>0.0))
-            self.masks['cldbuoyx'].setfieldze((self.helper.dthetarhoxze>0.0)*cldze)
-            del cldze
-            self.masks['cld'].setfield(self.helper.cld)
-            self.masks['cldupd'].setfield(self.helper.cld*(self.helper.wzc>0.0))
-            self.masks['cldupdw1'].setfield(self.helper.cld*(self.helper.wzc>1.0))
+            deltheta=self.gv('th')
+            thetaref=self.gref('thref')     
+            delp=self.gv('p')
+            pref=self.gref('prefn')
+            #p=pref[None,None,:]+delp
+            exn=(pref/psfr)**(rd/cp)
+            theta=thetaref[None,None,:]+deltheta
+            t=theta*exn[None,None,:]
+            del theta,exn,deltheta,thetaref	
+	    qc=self.gq('q',nqc)
+	    qi=self.gq('q',nqi)
+	    qv=self.gq('q',nqv)
+            tlise=t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*self.gq('q',nqc)
+            qt=qc+qi+qv
+	    tv=t*(1+(rvord-1)*qv-qc-qi)
+            del qv,qc,qi,t
+	    meantv=mean_2d(tv)
+	    dtv=tv-meantv[None,None,:]
+	    #tvcheck,qccheck=fastmoistphysics(tlise,qt,self.helper.zc,pref)
+            #cldcheck=(qccheck>0.0)
+            #dtvcheck=tvcheck-mean_2d(tv)
+            #print mean_2d(dtvcheck)
+            cldcheck=self.helper.cld
+	    self.masks['cld'].setfield(cldcheck)
+            self.masks['cldupd'].setfield(cldcheck*(self.helper.wzc>0.0))
+            self.masks['cldupdw1'].setfield(cldcheck*(self.helper.wzc>1.0))
             self.masks['upd'].setfield((self.helper.wzc>0.0))
-            self.masks['buoyx'].setfield((self.helper.dthetarhox>0.0))
-            self.masks['cldbuoyx'].setfield((self.helper.dthetarhox>0.0)*self.helper.cld)
-            cldxe=self.helper.cld # should be updated with interpolated saturation deficit
+            self.masks['buoyx'].setfield((dtv>0.0))
+            self.masks['cldbuoyx'].setfield((dtv>0.0)*cldcheck)   
+	    del dtv,cldcheck
+            # PHYSICS AT XE
             wxe=0.5*(self.helper.wzc[:,:,:]+vstack((self.helper.wzc[-1,:,:][None,:,:],self.helper.wzc[:-1,:,:])))
-            dthetarhoxxe=0.5*(self.helper.dthetarhox[:,:,:]+vstack((self.helper.dthetarhox[-1,:,:][None,:,:],self.helper.dthetarhox[:-1,:,:])))
+            tlisexe=0.5*(tlise[:,:,:]+vstack((tlise[-1,:,:][None,:,:],tlise[:-1,:,:])))
+            qtxe=0.5*(qt[:,:,:]+vstack((qt[-1,:,:][None,:,:],qt[:-1,:,:])))
+            tvxe,qcxe=fastmoistphysics(tlisexe,qtxe,self.helper.zc,pref,force=self.force)
+	    self.force=1
+	    del qtxe,tlisexe
+	    dtvxe=tvxe-meantv
+	    cldxe=(qcxe>1.0e-6)
             self.masks['cld'].setfieldxe(cldxe)
             self.masks['cldupd'].setfieldxe(cldxe*(wxe>0.0))
             self.masks['cldupdw1'].setfieldxe(cldxe*(wxe>1.0))
             self.masks['upd'].setfieldxe((wxe>0.0))
-            self.masks['buoyx'].setfieldxe((dthetarhoxxe>0.0))
-            self.masks['cldbuoyx'].setfieldxe((dthetarhoxxe>0.0)*cldxe)
-            del cldxe,wxe,dthetarhoxxe
-            cldye=self.helper.cld # should be updated with interpolated saturation deficit
+            self.masks['buoyx'].setfieldxe((dtvxe>0.0))
+            self.masks['cldbuoyx'].setfieldxe((dtvxe>0.0)*cldxe)
+            del cldxe,wxe,tvxe,dtvxe
+	    # PHYSICS AT YE	    
             wye=0.5*(self.helper.wzc[:,:,:]+hstack((self.helper.wzc[:,-1,:][:,None,:],self.helper.wzc[:,:-1,:])))
-            dthetarhoxye=0.5*(self.helper.dthetarhox[:,:,:]+hstack((self.helper.dthetarhox[:,-1,:][:,None,:],self.helper.dthetarhox[:,:-1,:])))
+            tliseye=0.5*(tlise[:,:,:]+hstack((tlise[:,-1,:][:,None,:],tlise[:,:-1,:])))
+            qtye=0.5*(qt[:,:,:]+hstack((qt[:,-1,:][:,None,:],qt[:,:-1,:])))
+            tvye,qcye=fastmoistphysics(tliseye,qtye,self.helper.zc,pref)
+	    del qtye,tliseye
+	    dtvye=tvye-meantv
+	    cldye=(qcye>1.0e-6)
             self.masks['cld'].setfieldye(cldye)
             self.masks['cldupdw1'].setfieldye(cldye*(wye>1.0))
             self.masks['cldupd'].setfieldye(cldye*(wye>0.0))
             self.masks['upd'].setfieldye((wye>0.0))
-            self.masks['buoyx'].setfieldye((dthetarhoxye>0.0))
-            self.masks['cldbuoyx'].setfieldye((dthetarhoxye>0.0)*cldye)
+            self.masks['buoyx'].setfieldye((dtvye>0.0))
+            self.masks['cldbuoyx'].setfieldye((dtvye>0.0)*cldye)
+            del cldye,wye,tvye,dtvye
+            # PHYSICS AT ZE, TAKE INTO ACCOUNT SURFACE
+            w=self.gv('w')
+            qtze=dstack((0.5*(qt[:,:,:-1]+qt[:,:,1:]),qt[:,:,-1]+(qt[:,:,-1]-qt[:,:,-2])))
+	    tliseze=dstack((0.5*(tlise[:,:,:-1]+tlise[:,:,1:]),tlise[:,:,-1]+(tlise[:,:,-1]-tlise[:,:,-2])))
+	    prefze=hstack((0.5*(pref[:-1]+pref[1:]),[pref[-1]+(pref[-1]-pref[-2])]))
+            tvze,qcze=fastmoistphysics(tliseze,qtze,self.gdim('z'),prefze)
+	    del qtze,tliseze
+	    dtvze=deviation_2d(tvze)
+	    cldze=(qcze>1.0e-6)
+            self.masks['cld'].setfieldze(cldze)
+            self.masks['cldupd'].setfieldze(cldze*(w>0.0))
+            self.masks['cldupdw1'].setfieldze(cldze*(w>1.0))
+            self.masks['upd'].setfieldze((w>0.0))    
+            self.masks['buoyx'].setfieldze((dtvze>0.0))
+            self.masks['cldbuoyx'].setfieldze((dtvze>0.0)*cldze)
+            del cldze,w,tvze,dtvze
     def init_masks(self,masks):
         self.masks={}
         for maskname in masks:
