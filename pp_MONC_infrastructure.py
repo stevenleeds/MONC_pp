@@ -450,8 +450,9 @@ class nchelper(object,get_variable_class):
         self.varkeys=self.data.variables.keys()
         self.tstep=self.tstep+1
         w=self.gv('w')
-        wplus=dstack((w[:,:,1:],0.0*w[:,:,-1]))
-        self.wzc=0.5*(w+wplus)
+        whalf=0.5*(w[:,:,1:]+w[:,:,:-1])
+        bottom=-whalf[:,:,0]
+	self.wzc=dstack((bottom[:,:,None],whalf))
         self.wmin=nanmin(w,axis=2)
         self.wmax=nanmax(w,axis=2)
         qci=self.gq('q',nqc)+self.gq('q',nqi) # try to include ice
