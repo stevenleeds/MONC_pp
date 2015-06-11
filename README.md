@@ -28,7 +28,12 @@ sjboing (at) "the usual g-mail suffix"
 This is a collection of scripts for post-processing (after-burning) MONC output
 
 This directory includes the following scripts
-* pp_MONC.py: Generic postprocessing for a single case
+* pp_MONC.py: Generic postprocessing routine for a single case. This is the code
+  that users can modify easily
+* pp_MONC_infrastucture.py: Classes and functions used in pp_MONC.py
+* pp_MONC_constants.py: Physical constants from MONC, for calculation of derived variables
+* pp_MONC_settings.py: Set what type of output to generate, and at which locations
+  Also sets part of the file path on different machines
 * fieldslist.py: Lists of variables to analyze
 * areaspectra.py: code for calculating spectra (thanks Juerg Schmidli, ETHZ)
 
