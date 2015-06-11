@@ -823,7 +823,7 @@ class statgroupclouds(statgroup_reduced):
              so.units=units
                              
 # class for postprocessing data
-class dataprocessor(get_variable_class):
+class dataorganizer(get_variable_class):
     def __init__(self):
         self.data=[]
         self.helper=[]
@@ -848,7 +848,6 @@ class dataprocessor(get_variable_class):
             thetaref=self.gref('thref')     
             delp=self.gv('p')
             pref=self.gref('prefn')
-            #p=pref[None,None,:]+delp
             exn=(pref/psfr)**(rd/cp)
             theta=thetaref[None,None,:]+deltheta
             t=theta*exn[None,None,:]
@@ -1007,6 +1006,9 @@ class dataprocessor(get_variable_class):
     def dom_var(self,var,value):
         self.stat_dom.put_make_var(var,value)
     # ACTUAL CALCULATIONS HAPPEN HERE
+
+# class for postprocessing data
+class dataprocessor(dataorganizer):
     def processor(self):
         u=self.gv('u')
         v=self.gv('v')
