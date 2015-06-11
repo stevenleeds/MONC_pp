@@ -12,29 +12,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # Copyright (C) 2013-2015 Steven Boeing, ETHZ
 # Copyright (C) 2015 Steven Boeing, University of Leeds
-
-# A PYTHON SCRIPT TO POSTPROCESS ALL MONC OUTPUT IN A DIRECTORY AT ONCE
-# BASED ON EARLIER WORK BY THE AUTHOR FOR COSMO OUTPUT
-
-# SEPARATE SCRIPTS SHOULD DO THE PLOTTING OF OUTPUT
-# AIMED AT A COMBINATION OF SPEED; READABILITY AND A SOMEWHAT LIMIT MEMORY USAGE
-# I.E. ABILITY TO POSTPROCESS LARGE DATA ON A SINGLE NODE
-
-# detect all MONC output files and find the corresponding time
-# incrementally add the output to an output file
-# includes masked/sampled statistics (like in traditional LES models)
-# masks can also be used to average over pre-selected subdomain (e.g. a box)
-# but currently such domains are not implemented
-# outputs to a zipped file which is saved with f4 precision (to reduce file size)
-# and further reduced precision for in-cloud 3d variables
-
-# Requires python with netcdf4python, numpy and scipy (for embedding C-code with weave)
-
-# EXAMPLE
-# python pp_MONC.py bomex bomex
-# ------------------case directory
-# ------------------------experiment name                        
-
+                   
 # Moisture vairables
 # Negative numbers can be used to ignore species
 nqv=0  # q number corresponding to water vapor

@@ -12,29 +12,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # Copyright (C) 2013-2015 Steven Boeing, ETHZ
 # Copyright (C) 2015 Steven Boeing, University of Leeds
-
-# A PYTHON SCRIPT TO POSTPROCESS ALL MONC OUTPUT IN A DIRECTORY AT ONCE
-# BASED ON EARLIER WORK BY THE AUTHOR FOR COSMO OUTPUT
-
-# SEPARATE SCRIPTS SHOULD DO THE PLOTTING OF OUTPUT
-# AIMED AT A COMBINATION OF SPEED; READABILITY AND A SOMEWHAT LIMIT MEMORY USAGE
-# I.E. ABILITY TO POSTPROCESS LARGE DATA ON A SINGLE NODE
-
-# detect all MONC output files and find the corresponding time
-# incrementally add the output to an output file
-# includes masked/sampled statistics (like in traditional LES models)
-# masks can also be used to average over pre-selected subdomain (e.g. a box)
-# but currently such domains are not implemented
-# outputs to a zipped file which is saved with f4 precision (to reduce file size)
-# and further reduced precision for in-cloud 3d variables
-
-# Requires python with netcdf4python, numpy and scipy (for embedding C-code with weave)
-
-# EXAMPLE
-# python pp_MONC.py bomex bomex
-# ------------------case directory
-# ------------------------experiment name                        
-
+                   
 ## IMPORTS
 
 from numpy import *
@@ -59,6 +37,12 @@ import numpy
 start=time.clock() 
 numpy.seterr(invalid='ignore') # don't wine about nans
 
+case=''
+exper=''
+fulldir=''
+scratchdir=''
+projectdir=''
+
 ##  EXTRA DECLARATIONS FOR FAST SATURATION PHYSICS
 
 numpsatarr=zeros(350,double) # saturation pressure values numerator array
@@ -79,12 +63,6 @@ for i in range(150,350):
    psatarrabc[2,i]=splinecoeffs[i-150][2]
 
 ## FUNCTIONS
-
-case=''
-exper=''
-fulldir=''
-scratchdir=''
-projectdir=''
         
 # forced makedir
 def mkdir_p(path):
@@ -193,6 +171,22 @@ def deviation_yz(inputfield):
     delta=inputfield-meanfield[None,:,:]
     return delta
 
+def interpolate_xe(field):
+    fieldxe=0.5*(field[:,:,:]+vstack((field[-1,:,:][None,:,:],field[:-1,:,:])))
+    return fieldxe
+
+def interpolate_ye(field):
+    fieldye=0.5*(field[:,:,:]+hstack((field[:,-1,:][:,None,:],field[:,:-1,:])))
+    return fieldye
+
+def interpolate_ze(field):
+    fieldze=dstack((0.5*(field[:,:,:-1]+field[:,:,1:]),field[:,:,-1]+(field[:,:,-1]-field[:,:,-2])))
+    return fieldze
+
+def interpolate_ze_1d(array):
+    arrayze=hstack((0.5*(array[:-1]+array[1:]),[array[-1]+(array[-1]-array[-2])]))
+    return arrayze
+                
 # command to get a single variable from a file
 def var_from_file(dataset,key):
     if(nboundlines>0):
@@ -268,14 +262,14 @@ def fastmoistphysics(tlisein,qtin,z,p,force=0):
     int const imax="""+str(imax)+""";
     int const jmax="""+str(jmax)+""";
     int const kmax="""+str(kmax)+""";
-    double const cp=1005.0;
-    double const rlvap=2.501e6;
-    double const G=9.81;
-    double const rvrd=1.608;
+    double const cp="""+str(cp)+""";
+    double const rlvap="""+str(rlvap)+""";
+    double const grav="""+str(grav)+""";
+    double const rvord="""+str(rvord)+""";
     double const invrlvap=1.0/rlvap;
     double const invcp=1.0/cp;
-    double const qsa1 = 3.8;
-    double const qsa4 = 6.109;
+    double const qsa1="""+str(qsa1)+""";
+    double const qsa4="""+str(qsa4)+""";
     
     int niter;
     bool lunsat;
@@ -297,7 +291,7 @@ def fastmoistphysics(tlisein,qtin,z,p,force=0):
       lunsat=true;
             
       //first temperature guess: dry parcel
-      zt=ztlise-(G*invcp)*zz;
+      zt=ztlise-(grav*invcp)*zz;
       ztint=std::min(int(zt),349);
       znumpint=numpsatarr(ztint);
       zdenpint=denpsatarr(ztint);
@@ -318,7 +312,7 @@ def fastmoistphysics(tlisein,qtin,z,p,force=0):
          ztold=zt;
          niter=0;
          zqsat=qsa1/(zp*zpsat-qsa4);
-         ztliseguess=zt+(G*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);
+         ztliseguess=zt+(grav*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);
                   
          // Calculate Newton-Raphson iteration at perturbed temperature
          // Follow the saturation curves at the previous temperature
@@ -326,9 +320,9 @@ def fastmoistphysics(tlisein,qtin,z,p,force=0):
 
          zpsat=zpsat-0.002*psatarrabc(1,ztint)+0.5*4.0e-6*psatarrabc(2,ztint);
          zqsat=qsa1/(zp*zpsat-qsa4);
-         ztliseguesstry =zttry+(G*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);
+         ztliseguesstry =zttry+(grav*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);
          
-         zt = std::min(std::max(ztlise-(G*invcp)*zz,zt-(ztliseguess-ztlise)/((ztliseguess-ztliseguesstry)*500.0)),ztlise-(G*invcp)*zz+(rlvap*invcp)*zqt);
+         zt = std::min(std::max(ztlise-(grav*invcp)*zz,zt-(ztliseguess-ztlise)/((ztliseguess-ztliseguesstry)*500.0)),ztlise-(grav*invcp)*zz+(rlvap*invcp)*zqt);
                   
          while((std::abs(zt-ztold) > 0.002) and (niter<40)) {
            niter = niter+1;
@@ -336,24 +330,24 @@ def fastmoistphysics(tlisein,qtin,z,p,force=0):
            ztint=std::min(int(zt),349);
            zpsat=psatarrabc(0,ztint)+(zt-ztint)*psatarrabc(1,ztint)+0.5*(zt-ztint)*(zt-ztint)*psatarrabc(2,ztint);
            zqsat=qsa1/(zp*zpsat-qsa4);
-           ztliseguess=zt+(G*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);
+           ztliseguess=zt+(grav*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);
                     
            // Calculate Newton-Raphson iteration at perturbed temperature
            // Follow the saturation curves at the previous temperature
            zttry=zt-0.002;
            zpsat=zpsat-0.002*psatarrabc(1,ztint)+0.5*4.0e-6*psatarrabc(2,ztint);
            zqsat=qsa1/(zp*zpsat-qsa4);
-           ztliseguesstry =zttry+(G*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);                
+           ztliseguesstry =zttry+(grav*invcp)*zz-(rlvap*invcp)*std::max(zqt-zqsat,0.0);                
 
-           zt = std::min(std::max(ztlise-(G*invcp)*zz,zt-(ztliseguess-ztlise)/((ztliseguess-ztliseguesstry)*500.0)),ztlise-(G*invcp)*zz+(rlvap*invcp)*zqt);
+           zt = std::min(std::max(ztlise-(grav*invcp)*zz,zt-(ztliseguess-ztlise)/((ztliseguess-ztliseguesstry)*500.0)),ztlise-(grav*invcp)*zz+(rlvap*invcp)*zqt);
         }
                  
-        zqc=cp*invrlvap*(zt-ztlise+(G*invcp)*zz);
+        zqc=cp*invrlvap*(zt-ztlise+(grav*invcp)*zz);
         
         if(zqc>0.0) {
           // moist parcel, adjust qc
           // conservation of lise, qt
-          ztv=zt*(1.0+(rvrd-1.0)*(zqt-zqc)-zqc);
+          ztv=zt*(1.0+(rvord-1.0)*(zqt-zqc)-zqc);
         }        
         else {
           // parcel is dry after all, see below
@@ -362,7 +356,7 @@ def fastmoistphysics(tlisein,qtin,z,p,force=0):
       }
       
       if(lunsat==true) {
-        ztv=zt*(1.0+(rvrd-1.0)*zqt);
+        ztv=zt*(1.0+(rvord-1.0)*zqt);
         zqc=0.0;
       }
       
@@ -827,11 +821,11 @@ class dataorganizer(get_variable_class):
             self.masks['cldbuoyx'].setfield((dtv>0.0)*cldcheck)   
 	    del dtv,cldcheck
             # PHYSICS AT XE
-            wxe=0.5*(self.helper.wzc[:,:,:]+vstack((self.helper.wzc[-1,:,:][None,:,:],self.helper.wzc[:-1,:,:])))
-            tlisexe=0.5*(tlise[:,:,:]+vstack((tlise[-1,:,:][None,:,:],tlise[:-1,:,:])))
-            qtxe=0.5*(qt[:,:,:]+vstack((qt[-1,:,:][None,:,:],qt[:-1,:,:])))
+            wxe=interpolate_xe(self.helper.wzc)
+            tlisexe=interpolate_xe(tlise)
+            qtxe=interpolate_xe(qt)
             tvxe,qcxe=fastmoistphysics(tlisexe,qtxe,self.helper.zc,pref,force=self.force)
-	    self.force=1
+	    self.force=0
 	    del qtxe,tlisexe
 	    dtvxe=tvxe-meantv
 	    cldxe=(qcxe>1.0e-6)
@@ -843,9 +837,9 @@ class dataorganizer(get_variable_class):
             self.masks['cldbuoyx'].setfieldxe((dtvxe>0.0)*cldxe)
             del cldxe,wxe,tvxe,dtvxe
 	    # PHYSICS AT YE	    
-            wye=0.5*(self.helper.wzc[:,:,:]+hstack((self.helper.wzc[:,-1,:][:,None,:],self.helper.wzc[:,:-1,:])))
-            tliseye=0.5*(tlise[:,:,:]+hstack((tlise[:,-1,:][:,None,:],tlise[:,:-1,:])))
-            qtye=0.5*(qt[:,:,:]+hstack((qt[:,-1,:][:,None,:],qt[:,:-1,:])))
+            wye=interpolate_ye(self.helper.wzc)
+            tliseye=interpolate_ye(tlise)
+            qtye=interpolate_ye(qt)
             tvye,qcye=fastmoistphysics(tliseye,qtye,self.helper.zc,pref)
 	    del qtye,tliseye
 	    dtvye=tvye-meantv
@@ -859,9 +853,9 @@ class dataorganizer(get_variable_class):
             del cldye,wye,tvye,dtvye
             # PHYSICS AT ZE, TAKE INTO ACCOUNT SURFACE
             w=self.gv('w')
-            qtze=dstack((0.5*(qt[:,:,:-1]+qt[:,:,1:]),qt[:,:,-1]+(qt[:,:,-1]-qt[:,:,-2])))
-	    tliseze=dstack((0.5*(tlise[:,:,:-1]+tlise[:,:,1:]),tlise[:,:,-1]+(tlise[:,:,-1]-tlise[:,:,-2])))
-	    prefze=hstack((0.5*(pref[:-1]+pref[1:]),[pref[-1]+(pref[-1]-pref[-2])]))
+            qtze=interpolate_ze(qt)
+	    tliseze=interpolate_ze(tlise)
+	    prefze=interpolate_ze_1d(pref)
             tvze,qcze=fastmoistphysics(tliseze,qtze,self.gdim('z'),prefze)
 	    del qtze,tliseze
 	    dtvze=deviation_2d(tvze)
