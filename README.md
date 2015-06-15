@@ -32,7 +32,7 @@ This directory includes the following scripts
   that users can modify easily
 * pp_MONC_infrastucture.py: Classes and functions used in pp_MONC.py
 * pp_MONC_constants.py: Physical constants from MONC, for calculation of derived variables
-* pp_MONC_settings.py: Set what type of output to generate, and at which locations
+* pp_MONC_settings.py: Set what type of output to generate, and at which locations. 
   Also sets part of the file path on different machines
 * fieldslist.py: Lists of variables to analyze
 * areaspectra.py: code for calculating spectra (thanks Juerg Schmidli, ETHZ)
@@ -69,3 +69,16 @@ The second "bomex" is the experiment name
 
 With the input files in e.g.
 /nfs/see-fs-01_users/"yourname"/MONCin/bomex (at Leeds)
+
+**ADDING A VARIABLE**
+
+* Append the variable to the corresponding list in fieldslist.py
+* Add the output function and the calculation of the variable to pp_MONC.py. Output funtions are
+**  process_var: process statistics and make cross sections
+**  stat_var: process only the statistics of the variable
+**  int_var: this is a height integrated variable
+**  ref_var: this is a reference variable profile
+
+**CHANGING THE PATH OF INPUT/OUTPUT**
+
+* See pp_MONC_settings.py for default paths on a number of default paths
