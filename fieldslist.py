@@ -71,7 +71,7 @@ derivedfields={
 'BUOYXVAR':['variance of buoyancy (exl hydrometeors)',u'm2 s-4'],
 'QVVAR':['variance of water vapor',u'-'],
 'QTVAR':['variance of total water',u'-'],
-'RHOWBUOYX':['anelastic buoyancy flux (incl hydrometeors)',u'kg m-1 s-3'],
+'RHOWBUOY':['anelastic buoyancy flux (incl hydrometeors)',u'kg m-1 s-3'],
 'RHOWBUOYX':['anelastic buoyancy flux (excl hydrometeors)',u'kg m-1 s-3'],
 'RHOWTHETA':['anelastic potential temperature flux',u'kg m-2 s-1 K'],
 'RHOWQT':['anelastic total water flux (excl hydrometeors)',u'kg m-2 s-1'],
@@ -82,7 +82,7 @@ derivedfields={
 'TKESFS':['subfilter-scale TKE',u'm2 s-2'],
 'KM':['eddy viscosity',u'm-1 s-1'],
 'DP':['pressure perturbation with respect to slab mean',u'Pa'],
-'PGRAD':['pressure gradient term',u'm s-2'],
+'DPDZ':['pressure gradient term',u'm s-2'],
 'BMINP':['bouyancy minus pressure gradient term',u'm s-2'],
 }
 
@@ -91,6 +91,7 @@ intfields={
 'VWP':['water wapor path',u'kg m-2'],
 'CWP':['cloud liquid water path',u'kg m-2'],
 'IWP':['cloud ice path',u'kg m-2'],
+'TWP':['non-precipiating total water path',u'kg m-2'],
 'RWP':['rain water path',u'kg m-2'],
 'GWP':['graupel water path',u'kg m-2'],
 'SWP':['snow path',u'kg m-2'],

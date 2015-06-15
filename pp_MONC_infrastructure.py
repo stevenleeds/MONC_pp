@@ -186,7 +186,12 @@ def interpolate_ze(field):
 def interpolate_ze_1d(array):
     arrayze=hstack((0.5*(array[:-1]+array[1:]),[array[-1]+(array[-1]-array[-2])]))
     return arrayze
-                
+
+def dz(field,zin):  
+    nanxy=float('nan')*field[:,:,0][:,:,None]
+    return (concatenate((nanxy,(field[:,:,2:]-field[:,:,:-2])/(zin[None,None,2:]-zin[None,None,:-2]),nanxy),axis=2))
+            
+
 # command to get a single variable from a file
 def var_from_file(dataset,key):
     if(nboundlines>0):
@@ -463,6 +468,8 @@ class nchelper(object,get_variable_class):
         zhalf=0.5*(zmin+zplus)
         bottom=-zhalf[0]
         self.zc=hstack(([bottom],zhalf))
+        self.ze=self.gdim('z')
+        self.rhon=self.gref('rhon')
 
 # a class for netcdf output                              
 class ncobject(object,get_variable_class):
@@ -953,5 +960,6 @@ class dataorganizer(get_variable_class):
            self.stat_dom.put_make_var(var,mean_2d(field))
     def dom_var(self,var,value):
         self.stat_dom.put_make_var(var,value)
-    # ACTUAL CALCULATIONS HAPPEN HERE
+    def integrate_rho_zc(self,field):
+        return sum(field[:,:,1:]*((self.helper.ze[1:]-self.helper.ze[0:-1])*self.helper.rhon[1:])[None,None,:],axis=2,dtype=numpy.float64)	  
                                 

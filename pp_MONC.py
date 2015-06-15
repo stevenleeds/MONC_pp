@@ -52,6 +52,11 @@ numpy.seterr(invalid='ignore') # don't wine about nans
 
 # class for postprocessing data
 class dataprocessor(dataorganizer):
+    # FUNCTIONS to refer to
+    # process_var: process statistics and make cross sections
+    # stat_var: process only statistics
+    # int_var: this is a height integrated variable
+    # ref_var: this is a reference variable
     def processor(self):
         u=self.gv('u')
         v=self.gv('v')
@@ -95,12 +100,11 @@ class dataprocessor(dataorganizer):
         del thetarhox
         dp=deviation_2d(p)
         self.process_var('DP',dp)
-        zeroxy=0.0*dp[:,:,0][:,:,None]
-        pgrad=(1./rho[None,None,:])*(concatenate((zeroxy,(dp[:,:,2:]-dp[:,:,:-2])/(self.helper.zc[None,None,2:]-self.helper.zc[None,None,:-2]),zeroxy),axis=2))
-        self.process_var('PGRAD',pgrad)
+        dpdz=(1./rho[None,None,:])*dz(dp,self.helper.zc)
+        self.process_var('DPDZ',dpdz)
         del dp
-        self.process_var('BMINP',concatenate((zeroxy,buoyx[:,:,1:-1]-pgrad[:,:,1:-1],zeroxy),axis=2))
-        del pgrad,buoyx      
+        self.process_var('BMINP',buoyx-dpdz)
+        del dpdz,buoyx      
         thetal=theta-(rlvap/(cp*exn))*qc-(rlsub/(cp*exn))*qi
         self.process_var('THETAL',thetal) 
         del thetal
@@ -126,7 +130,7 @@ class dataprocessor(dataorganizer):
         dqv=deviation_2d(qv)
         self.stat_var('QVVAR',dqv*dqv)    
         del dqv
-        dqt=deviation_2d(qv+qc)
+        dqt=deviation_2d(qv+qci)
         self.stat_var('QTVAR',dqt*dqt)
         del dqt    
         # height integrated variables 
@@ -134,8 +138,13 @@ class dataprocessor(dataorganizer):
         self.int_var('WMAX',self.helper.wmax)
         self.int_var('CLDTOP',nanmax(self.helper.cld*self.helper.zc[None,None,:],axis=2))   
         self.int_var('CLDW1TOP',nanmax(self.helper.cld*(self.helper.wzc>1.0)*self.helper.zc[None,None,:],axis=2))
+        self.int_var('VWP',self.integrate_rho_zc(qv))
+        self.int_var('CWP',self.integrate_rho_zc(qc))
+        self.int_var('IWP',self.integrate_rho_zc(qi))
+        self.int_var('TWP',self.integrate_rho_zc(qv+qci))
         # domain integrated variables 
-        self.dom_var('CC',mean_2d(nanmax(self.helper.cld,axis=2)))      
+        self.dom_var('CC',mean_2d(nanmax(self.helper.cld,axis=2)))
+	# produce areal coverage      
         if lsamp:
             for mask in self.masks.keys():
                self.samp_1d.put_make_sampvar('frac',mean_2d(self.masks[mask].field),mask)                 
