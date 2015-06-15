@@ -74,10 +74,14 @@ With the input files in e.g.
 
 * Append the variable to the corresponding list in fieldslist.py
 * Add the output function and the calculation of the variable to pp_MONC.py. Output funtions are
-**  process_var: process statistics and make cross sections
-**  stat_var: process only the statistics of the variable
-**  int_var: this is a height integrated variable
-**  ref_var: this is a reference variable profile
+
+  process_var: process statistics and make cross sections
+
+  stat_var: process only the statistics of the variable
+
+  int_var: this is a height integrated variable
+
+  ref_var: this is a reference variable profile
 
 **CHANGING THE PATH OF INPUT/OUTPUT**
 
