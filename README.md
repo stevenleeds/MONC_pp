@@ -85,4 +85,4 @@ With the input files in e.g.
 
 **CHANGING THE PATH OF INPUT/OUTPUT**
 
-* See pp_MONC_settings.py for default paths on a number of default paths
+* See pp_MONC_settings.py for default paths on a number of platforms
