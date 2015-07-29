@@ -94,9 +94,8 @@ class dataprocessor(dataorganizer):
         self.process_var('THETARHOX',thetarhox)
         buoyx=grav*deviation_2d(thetarhox)/thetaref[None,None,:]
         self.process_var('BUOYX',buoyx)  
-        dbuoyx=deviation_2d(buoyx)
-        self.stat_var('BUOYXVAR',dbuoyx*dbuoyx)      
-        del dbuoyx
+        self.stat_var('BUOYXVAR',buoyx*buoyx)      
+        self.process_var('RHOWBUOY',buoyx*w*rho)
         del thetarhox
         dp=deviation_2d(p)
         self.process_var('DP',dp)
@@ -132,6 +131,7 @@ class dataprocessor(dataorganizer):
         del dqv
         dqt=deviation_2d(qv+qci)
         self.stat_var('QTVAR',dqt*dqt)
+	self.stat_var('RHOWQT',dqt*w*rho)
         del dqt    
         # height integrated variables 
         self.int_var('WMIN',self.helper.wmin)      
