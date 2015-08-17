@@ -125,19 +125,19 @@ def prepare_spectra_x(dataout,data,imax,jmax,kmin,kmax,force=0):
     }
     """
     weave.inline(code,['dataout','data','imax','jmax','kmin','kmax'],type_converters=converters.blitz,compiler='gcc',force=force)
-         
+
 # mean value across 2d slab
-def mean_2d(inputfield):
-    meanfield=mean(mean(inputfield,axis=1, dtype=numpy.float64),axis=0, dtype=numpy.float64)
-    return meanfield
-    
-# mean value across 1d line      
 def mean_xz(inputfield):
     meanfield=mean(inputfield,axis=1, dtype=numpy.float64)
     return meanfield
     
 def mean_yz(inputfield):
     meanfield=mean(inputfield,axis=0, dtype=numpy.float64)
+    return meanfield
+
+def mean_2d(inputfield):
+    meanfield1=mean(inputfield,axis=0,dtype=numpy.float64)
+    meanfield=mean(meanfield1,axis=0,dtype=numpy.float64)
     return meanfield
 
 # extraction used for cross-sections
@@ -171,6 +171,14 @@ def deviation_yz(inputfield):
     delta=inputfield-meanfield[None,:,:]
     return delta
 
+def xe_to_xc(field):
+    fieldxc=0.5*(field[:,:,:]+vstack((field[:-1,:,:],field[-1,:,:][None,:,:])))    
+    return fieldxc
+
+def ye_to_yc(field):
+    fieldyc=0.5*(field[:,:,:]+hstack((field[:,:-1,:],field[:,-1,:][:,None,:])))
+    return fieldyc
+
 def interpolate_xe(field):
     fieldxe=0.5*(field[:,:,:]+vstack((field[-1,:,:][None,:,:],field[:-1,:,:])))
     return fieldxe
@@ -187,10 +195,19 @@ def interpolate_ze_1d(array):
     arrayze=hstack((0.5*(array[:-1]+array[1:]),[array[-1]+(array[-1]-array[-2])]))
     return arrayze
 
+def cropped(array):
+    if(nboundlines>0):
+        return array[nboundlines:-nboundlines]
+    else:
+        return array
+    
 def dz(field,zin):  
     nanxy=float('nan')*field[:,:,0][:,:,None]
     return (concatenate((nanxy,(field[:,:,2:]-field[:,:,:-2])/(zin[None,None,2:]-zin[None,None,:-2]),nanxy),axis=2))
             
+def dz_1d(field,zin):  
+    nan_1d=float('nan')
+    return (concatenate(([nan_1d],(field[2:]-field[:-2])/(zin[2:]-zin[:-2]),[nan_1d])))
 
 # command to get a single variable from a file
 def var_from_file(dataset,key):
@@ -389,12 +406,16 @@ class mask:
         pass
     def setfield(self,field):
         self.field=field
+        self.ifrac=1.0/mean_2d(field)
     def setfieldxe(self,field):
         self.fieldxe=field
+        self.ifracxe=1.0/mean_2d(field)
     def setfieldye(self,field):
         self.fieldye=field
+        self.ifracye=1.0/mean_2d(field)
     def setfieldze(self,field):
         self.fieldze=field
+        self.ifracze=1.0/mean_2d(field)
 	            
 # a class to include some methods needed for both the help-variable class (which store temp variables) and the netcdf class
 class get_variable_class():
@@ -470,6 +491,8 @@ class nchelper(object,get_variable_class):
         self.zc=hstack(([bottom],zhalf))
         self.ze=self.gdim('z')
         self.rhon=self.gref('rhon')
+        self.xe=self.gdim('x')
+        self.ye=self.gdim('y')
 
 # a class for netcdf output                              
 class ncobject(object,get_variable_class):
@@ -529,12 +552,12 @@ class ncobject(object,get_variable_class):
     def init_dimxc(self,sel=None):
         xe=self.gdim('x')
         xmin=hstack(([0],self.gdim('x')[:-1]))
-        self.xc=0.5*(xmin+xe)
-        self.init_dim('xc','x [m]',self.xc,sel)        
+        self.xc=cropped(0.5*(xmin+xe))
+	self.init_dim('xc','x [m]',self.xc,sel)    
     def init_dimyc(self,sel=None):
         ye=self.gdim('y')
         ymin=hstack(([0],self.gdim('y')[:-1]))
-        self.yc=0.5*(ymin+ye)
+        self.yc=cropped(0.5*(ymin+ye))
         self.init_dim('yc','y [m]',self.yc,sel)
     def init_dimzc(self,sel=None):                      
         zmin=self.gdim('z')[:-1]
@@ -544,10 +567,10 @@ class ncobject(object,get_variable_class):
         self.zc=hstack(([bottom],zhalf))
         self.init_dim('zc','height [m]',self.zc,sel)    
     def init_dimxe(self,sel=None):
-        self.xe=self.gdim('x') 
+        self.xe=cropped(self.gdim('x')) 
         self.init_dim('xe','x [m] (staggered)',self.xe,sel)
     def init_dimye(self,sel=None):
-        self.ye=self.gdim('y')
+        self.ye=cropped(self.gdim('y'))
         self.init_dim('ye','y [m] (staggered)',self.ye,sel)
     def init_dimze(self,sel=None):
         self.ze=self.gdim('z')
@@ -922,9 +945,9 @@ class dataorganizer(get_variable_class):
         self.masked_var(var,field)
     def process_var(self,var,field):
         self.stat_1d.put_make_var(var,mean_2d(field))
-        self.cross_xz.put_make_var(var,field[:,ysel,:])
-        self.cross_yz.put_make_var(var,field[xsel,:,:]) 
-        self.cross_xy.put_make_var(var,field[:,:,zsel])           
+        self.cross_xz.put_make_var(var,take(field,ysel,axis=1))
+        self.cross_yz.put_make_var(var,take(field,xsel,axis=0)) 
+        self.cross_xy.put_make_var(var,take(field,zsel,axis=2))           
         self.stat_xz.put_make_var(var,mean_xz(field))
         self.stat_yz.put_make_var(var,mean_yz(field))
         if 'makespectra' in allfields[var]:
@@ -941,15 +964,26 @@ class dataorganizer(get_variable_class):
     def masked_var(self,var,field):
         if not lsamp:
             return
-        for mask in self.masks.keys():         
-            if 'xe' in allfields[var]:
-                self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].fieldxe)/mean_2d(self.masks[mask].fieldxe),mask)           
-            elif 'ye' in allfields[var]:
-                self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].fieldye)/mean_2d(self.masks[mask].fieldye),mask)  
-            elif 'ze' in allfields[var]:
-                self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].fieldze)/mean_2d(self.masks[mask].fieldze),mask)                      
-            else:
-                self.samp_1d.put_make_sampvar(var,mean_2d(field*self.masks[mask].field)/mean_2d(self.masks[mask].field),mask)
+        elif 'xe' in allfields[var]:
+            for mask in self.masks.keys():         
+                m1=field*self.masks[mask].fieldxe
+                m2=mean_2d(m1)*self.masks[mask].ifracxe
+                self.samp_1d.put_make_sampvar(var,m2,mask)           
+        elif 'ye' in allfields[var]:
+            for mask in self.masks.keys():         
+                m1=field*self.masks[mask].fieldye
+                m2=mean_2d(m1)*self.masks[mask].ifracye
+                self.samp_1d.put_make_sampvar(var,m2,mask)  
+        elif 'ze' in allfields[var]:
+            for mask in self.masks.keys():         
+                m1=field*self.masks[mask].fieldze
+                m2=mean_2d(m1)*self.masks[mask].ifracze
+                self.samp_1d.put_make_sampvar(var,m2,mask)                      
+        else:
+            for mask in self.masks.keys():      
+                m1=field*self.masks[mask].field
+                m2=mean_2d(m1)*self.masks[mask].ifrac
+                self.samp_1d.put_make_sampvar(var,m2,mask)
     def int_var(self,var,field):
         self.stat_int.put_make_var(var,field)
         if 'max' in allfields[var]:
@@ -960,6 +994,19 @@ class dataorganizer(get_variable_class):
            self.stat_dom.put_make_var(var,mean_2d(field))
     def dom_var(self,var,value):
         self.stat_dom.put_make_var(var,value)
+    def integrate_rho_ze(self,field):
+        return sum(0.25*(field[:,:,1:]+field[:,:,:-1])*((self.helper.ze[1:]-self.helper.ze[0:-1])*(self.helper.rhon[1:]+self.helper.rhon[0:-1]))[None,None,:],axis=2,dtype=numpy.float64)	  
     def integrate_rho_zc(self,field):
-        return sum(field[:,:,1:]*((self.helper.ze[1:]-self.helper.ze[0:-1])*self.helper.rhon[1:])[None,None,:],axis=2,dtype=numpy.float64)	  
-                                
+        return sum(field[:,:,1:]*((self.helper.zc[1:]-self.helper.ze[0:-1])*self.helper.rhon[1:])[None,None,:],axis=2,dtype=numpy.float64)	  
+    def hvort(self,u,v):
+        dvdx=(vstack((v[-1,:,:][None,:,:],v[:-1,:,:]))-v[:,:,:])/(self.helper.xe[1]-self.helper.xe[0])
+        dudy=(hstack((u[:,-1,:][:,None,:],u[:,:-1,:]))-u[:,:,:])/(self.helper.ye[1]-self.helper.ye[0])
+        return dvdx-dudy                            
+    def vvort(self,u,v,w):
+        dwdx=(vstack((w[-1,:,:][None,:,:],w[:-1,:,:]))-vstack((w[1:,:,:],w[0,:,:][None,:,:])))/(self.helper.xe[2]-self.helper.xe[0])
+        dwdy=(hstack((w[:,-1,:][:,None,:],w[:,:-1,:]))-hstack((w[:,1:,:],w[:,0,:][:,None,:])))/(self.helper.ye[2]-self.helper.ye[0])
+        dvdz=dstack(((v[:,:,1:]-v[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0])[None,None,:],0.0*v[:,:,-1]))
+        dudz=dstack(((u[:,:,1:]-u[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0])[None,None,:],0.0*u[:,:,-1]))
+        vvort=sqrt((dwdy-ye_to_yc(dvdz))**2+(dudz-xe_to_xc(dwdx))**2)
+        vvort[:,:,0]=0.0                            
+        return vvort                            

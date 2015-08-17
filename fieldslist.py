@@ -83,7 +83,12 @@ derivedfields={
 'KM':['eddy viscosity',u'm-1 s-1'],
 'DP':['pressure perturbation with respect to slab mean',u'Pa'],
 'DPDZ':['pressure gradient term',u'm s-2'],
+'RHOWBMINP':['bouyancy minus pressure gradient term',u'kg m-1 s-3'],
 'BMINP':['bouyancy minus pressure gradient term',u'm s-2'],
+'HVORT':['horizontal component of the vorticity vector',u's-1'],
+'VVORT':['vertical component of the vorticity vector',u's-1','ze'],
+'BVWET2EXC':['moist BV frequency squared excess',u's-2','ze'],
+'BG':['buoyancy generation',u'kg m-1 s-3','ze'],
 }
 
 # vertically integrated/maximum/minimum variables
@@ -101,6 +106,10 @@ intfields={
 'BUOYXMIN':['minimum buoyancy in column',u'm s-2','min'],
 'CLDTOP':['cloud top',u'm','max'],
 'CLDW1TOP':['cloudy updraft (1 m/s) top',u'm','max'],
+'MAXWIND':['maximum wind speed',u'm s-1','max'],
+'MAXWINDHEIGHT':['height of maximum wind speed',u'm'],
+'RHOWINT':['integrated vertical mass-flux',u'kg m2 s-2'],
+'RHOUVINT':['integrated horizontal mass-flux',u'kg m2 s-2'],
 }
 
 fracfields={
@@ -123,4 +132,6 @@ vertfields={
 'EXNREF':['anelastic exner function',u'-'],
 'PREF':['anelastic reference pressure',u'-'],
 'THETAREF':['anelastic reference temperature',u'-'],
+'BVDRY2':['BV frequency squared',u's-2','ze']
 }
+

@@ -67,7 +67,7 @@ class dataprocessor(dataorganizer):
         qv=self.gq('q',nqv)
         qc=self.gq('q',nqc)
         qi=self.gq('q',nqi)
-	qci=qc+qi
+        qci=qc+qi
         pref=self.gref('prefn')
         p=delp+pref[None,None,:]
         exn=(pref/psfr)**(rd/cp)
@@ -78,12 +78,26 @@ class dataprocessor(dataorganizer):
         self.process_var('W',w)
         self.process_var('QC',qc)
         self.process_var('QV',qv)
-        self.process_var('QT',qci+qv)
+        qt=qci+qv
+        self.process_var('QT',qt)
         self.process_var('THETA',theta)  
         self.process_var('P',p)
         self.process_var('T',t)
         self.process_var('TMSE',t+(grav/cp)*self.helper.zc[None,None,:]+(rlvap/cp)*qv-((rlsub-rlvap)/cp)*qi)
-        self.process_var('TLISE',t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qc-(rlsub/cp)*qi)
+        tlise=t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qc-(rlsub/cp)*qi
+        self.process_var('TLISE',tlise)
+        zcplus=self.helper.zc+5.0
+        prefplus=pref+5.0*dz_1d(pref,self.helper.zc)
+        iexnplus=(prefplus/psfr)**-(rd/cp)
+        (tvplus,qcplus)=fastmoistphysics(tlise,qt,zcplus,prefplus,force=self.force)
+        del qcplus,zcplus,prefplus
+        self.force=0
+        zcminus=self.helper.zc-5.0
+        prefminus=pref-5.0*dz_1d(pref,self.helper.zc)
+        iexnminus=(prefminus/psfr)**-(rd/cp)
+        (tvminus,qcminus)=fastmoistphysics(tlise,qt,zcminus,prefminus,force=self.force)
+        bvwet2=(grav/thetaref[None,None,:])*(tvplus*iexnplus[None,None,:]-tvminus*iexnminus[None,None,:])/10.0
+        del tvminus,tvplus,qcminus,zcminus,prefminus,iexnplus,iexnminus
         rhon=self.gref('rhon')       
         rho=self.gref('rho')
         self.ref_var('EXNREF',exn)
@@ -95,14 +109,19 @@ class dataprocessor(dataorganizer):
         buoyx=grav*deviation_2d(thetarhox)/thetaref[None,None,:]
         self.process_var('BUOYX',buoyx)  
         self.stat_var('BUOYXVAR',buoyx*buoyx)      
-        self.process_var('RHOWBUOY',buoyx*w*rho)
-        del thetarhox
+        self.process_var('RHOWBUOYX',buoyx*w*rho[None,None,:])
+        bvdry2=mean_2d((grav/thetaref[None,None,:])*dz(concatenate((thetarhox[:,:,1][:,:,None],thetarhox[:,:,1:]),axis=2),self.helper.zc))
+        self.ref_var('BVDRY2',bvdry2)
+        self.process_var('BVWET2EXC',bvwet2-bvdry2)
+        self.process_var('BG',rho[None,None,:]*w*(bvwet2-bvdry2))
+        del thetarhox,bvdry2,bvwet2
         dp=deviation_2d(p)
         self.process_var('DP',dp)
         dpdz=(1./rho[None,None,:])*dz(dp,self.helper.zc)
         self.process_var('DPDZ',dpdz)
         del dp
         self.process_var('BMINP',buoyx-dpdz)
+        self.process_var('RHOWBMINP',(buoyx-dpdz)*w*rho[None,None,:])
         del dpdz,buoyx      
         thetal=theta-(rlvap/(cp*exn))*qc-(rlsub/(cp*exn))*qi
         self.process_var('THETAL',thetal) 
@@ -131,7 +150,7 @@ class dataprocessor(dataorganizer):
         del dqv
         dqt=deviation_2d(qv+qci)
         self.stat_var('QTVAR',dqt*dqt)
-	self.stat_var('RHOWQT',dqt*w*rho)
+        self.stat_var('RHOWQT',dqt*w*rho[None,None,:])
         del dqt    
         # height integrated variables 
         self.int_var('WMIN',self.helper.wmin)      
@@ -142,7 +161,16 @@ class dataprocessor(dataorganizer):
         self.int_var('CWP',self.integrate_rho_zc(qc))
         self.int_var('IWP',self.integrate_rho_zc(qi))
         self.int_var('TWP',self.integrate_rho_zc(qv+qci))
-        # domain integrated variables 
+        # domain integrated variables
+        wspeed=sqrt(xe_to_xc(u*u)+ye_to_yc(v*v))
+        vvort=self.vvort(u,v,w)
+        self.process_var('VVORT',vvort)
+        hvort=self.hvort(u,v)
+        self.process_var('HVORT',hvort)
+        self.int_var('MAXWIND',nanmax(wspeed,axis=2))
+        self.int_var('MAXWINDHEIGHT',nanmax((wspeed>nanmax(wspeed,axis=2)[:,:,None]-1e-5)*self.helper.ze[None,None,:],axis=2))
+        self.int_var('RHOUVINT',self.integrate_rho_zc(wspeed))
+        self.int_var('RHOWINT',self.integrate_rho_ze(w))
         self.dom_var('CC',mean_2d(nanmax(self.helper.cld,axis=2)))
 	# produce areal coverage      
         if lsamp:
@@ -176,6 +204,17 @@ if loadmpl:
 if __name__ == "__main__":
     incase=sys.argv[1]
     inexper=sys.argv[2]
+    pp_MONC_infrastructure.case=incase
+    pp_MONC_infrastructure.exper=inexper
+    pp_MONC_infrastructure.fulldir=fullbase+incase+'/output/'
+    pp_MONC_infrastructure.scratchdir=scratchbase+incase+'/'
+    pp_MONC_infrastructure.projectdir=projectbase+incase+'/'
+    mkdir_p(pp_MONC_infrastructure.scratchdir)
+    mkdir_p(pp_MONC_infrastructure.scratchdir+'/clouds')
+    mkdir_p(pp_MONC_infrastructure.projectdir)
+    runme()
+
+def runprof(incase,inexper):
     pp_MONC_infrastructure.case=incase
     pp_MONC_infrastructure.exper=inexper
     pp_MONC_infrastructure.fulldir=fullbase+incase+'/output/'
