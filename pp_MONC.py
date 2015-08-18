@@ -201,18 +201,25 @@ if __name__ == "__main__":
     parser.add_argument("case")
     parser.add_argument("exper")
     parser.add_argument ("-c", "--config", dest='config_file', default='default.cfg', type=str);
+    parser.add_argument ("-s", "--sysconfig", dest='sysconfig_file', default=None, type=str);
     args=parser.parse_args()
     pp_MONC_infrastructure.outputconfig.update(args.config_file)
-    pp_MONC_infrastructure.sysconfig.autoupdate(args.case,args.exper)
+    if args.sysconfig_file==None:
+        pp_MONC_infrastructure.sysconfig.autoupdate(args.case,args.exper)
+    else:
+        pp_MONC_infrastructure.sysconfig.update(args.sysconfig_file,args.case,args.exper)
     mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir)
     mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir+'/clouds')
     mkdir_p(pp_MONC_infrastructure.sysconfig.projectdir)
     runme()
 
 # another interface for profiling
-def runprof(case,exper,cfgfile='default.cfg'):
+def runprof(case,exper,cfgfile='default.cfg',sysfile=None):
     pp_MONC_infrastructure.outputconfig.update(cfgfile)
-    pp_MONC_infrastructure.sysconfig.autoupdate(case,exper)
+    if sysfile==None:
+        pp_MONC_infrastructure.sysconfig.autoupdate(case,exper)
+    else:
+        pp_MONC_infrastructure.sysconfig.update(sysfile,case,exper)
     mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir)
     mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir+'/clouds')
     mkdir_p(pp_MONC_infrastructure.sysconfig.projectdir)

@@ -1,0 +1,4 @@
+[paths]
+scratchdir=/scratch/MONCout/$case/
+projectdir=/nfs/see-fs-01_users/$username/MONCout/$case/
+fulldir=/nfs/see-fs-01_users/$username/MONCin/$case/$exper/output/

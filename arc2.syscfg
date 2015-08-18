@@ -1,0 +1,4 @@
+[paths]
+scratchdir=/nobackup/$username/MONCout/$case/
+projectdir=/home/ufaserv1_h/$username/MONCout/$case/
+fulldir=/nobackup/$username/$case/$exper/output/

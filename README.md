@@ -34,8 +34,10 @@ This directory includes the following scripts
 * pp_MONC_constants.py: Physical constants from MONC, for calculation of derived variables
 * pp_MONC_settings.py: Set what type of output to generate, and at which locations. 
   Also sets part of the file path on different machines
+  Uses .cfg configuration files
 * fieldslist.py: Lists of variables to analyze
 * areaspectra.py: code for calculating spectra (thanks Juerg Schmidli, ETHZ)
+* .syscfg files: the settings on different systems
 
 **REQUIREMENTS**
 
@@ -63,12 +65,18 @@ Python with netcdf4python, numpy and scipy (for embedding C-code with weave)
 
 **EXAMPLE USAGE**
 
-python pp_MONC.py bomex bomex
-The first "bomex" is the case directory name
-The second "bomex" is the experiment name
+python pp_MONC.py bomex small_100
+"bomex" is the case directory name
+"small_100" is the experiment name
 
-With the input files in e.g.
-/nfs/see-fs-01_users/"yourname"/MONCin/bomex (at Leeds)
+python pp_MONC.py bomex small_100 -c default.cfg -s xcm.syscdf
+"bomex" is the case directory name
+"small_100" is the experiment name
+"default.cfg" is the configuration
+"xcm.syscfg" sets the paths on the xcm
+
+The input files are located at e.g.
+/nfs/see-fs-01_users/"yourname"/MONCin/bomex/small_100/ (on the see systems) 
 
 **ADDING A VARIABLE**
 

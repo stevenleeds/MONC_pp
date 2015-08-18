@@ -1,0 +1,5 @@
+[paths]
+scratchdir=$homedir/scratch/MONCout/$case/
+projectdir=$homedir/proj/MONCout/$case/
+fulldir=$homedir/MONCin/$case/$exper/output/
+
