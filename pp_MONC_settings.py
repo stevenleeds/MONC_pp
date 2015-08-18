@@ -16,59 +16,71 @@
 import os
 import socket
 import getpass
-
-## SETTINGS
-
-loadmpl=False # Load matplotlib
-lzlib=True # Compress output using zlib?
-lcross_xy=True # Produce xy cross-sections? Mais oui
-lcross_xz=True # Produce xz cross-sections? Mais oui
-lcross_yz=True # Produce yz cross-sections? Mais oui
-ldiag_xz=True # Produce xy diagnostics? Mais oui
-ldiag_yz=True # Produce yz diagnostics? Mais oui
-ldiag_int=True # Produce vertically integrated diagnostics? Mais oui
-lsamp=True # Produce sampled diagnostics? Mais oui
-lspec=True # Produce spectral diagnostics? Mais oui
-lclouds=True # Produce tar-ball with 3D cloud and precipitation fields for storage? Mais oui
-
-# where to take cross sections (currently just grid numbers, i.e., no interpolation)
-# has to be an array
-xsel=[0]
-ysel=[0]
-zsel=[0,1,10,20,30]
-
-# Between which level to produce spectra (can be multiple sets, formatted as [lowerlevel,upperlevel+1], as python array indexing works)
-spectralevels=[
-[10,20],
-[20,30],
-]
-
-# Option to crop the boundaries in the horizontal plane
-nboundlines=0
-
+import ConfigParser
+from json import loads
+from numpy import array
 ## FILE PATHS
+
+class opconfig():
+    def __init__(self):
+        pass
+    def update(self,cfgfile):
+        config = ConfigParser.RawConfigParser()
+        config.read(cfgfile)
+        self.lzlib=config.getboolean("outputs","lzlib")
+        self.lcross_xy=config.getboolean("outputs","lcross_xy")
+        self.lcross_xz=config.getboolean("outputs","lcross_xz")
+        self.lcross_yz=config.getboolean("outputs","lcross_yz")
+        self.ldiag_xz=config.getboolean("outputs","ldiag_xz")
+        self.ldiag_yz=config.getboolean("outputs","ldiag_yz")
+        self.ldiag_int=config.getboolean("outputs","ldiag_int")
+        self.lsamp=config.getboolean("outputs","lsamp")
+        self.lspec=config.getboolean("outputs","lspec")
+        self.lclouds=config.getboolean("outputs","lclouds")
+        self.xsel=loads(config.get("domain","xsel"))
+        self.ysel=loads(config.get("domain","ysel"))
+        self.zsel=loads(config.get("domain","zsel"))
+        self.spectralevelsbot=loads(config.get("domain","spectralevelsbot"))
+        self.spectralevelstop=loads(config.get("domain","spectralevelstop"))
+        self.nboundlines=config.getint("domain","nboundlines")
+        self.xsel=array(self.xsel)-self.nboundlines
+        self.ysel=array(self.ysel)-self.nboundlines
 
 myusername=getpass.getuser()
 hostname=socket.gethostname()
 homedir = os.environ['HOME']
 
-# fullbase: standard location of input directories
-# scratchbase: location of scratch space where initial postprocessing is done
-# localbase: location where final files are stored
-
-if 'see' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
-    scratchbase='/scratch/MONCout/'
-    projectbase='/nfs/see-fs-01_users/'+myusername+'/MONCout/'
-    fullbase='/nfs/see-fs-01_users/'+myusername+'/MONCin/'
-elif 'arc2' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
-    scratchbase='/nobackup/'+myusername+'/MONCout/'
-    projectbase='/home/ufaserv1_h/'+myusername+'/MONCout/'
-    fullbase='/nobackup/'+myusername+'/'
-elif 'monsoon-metoffice' in hostname: ## Met Office monsoon
-    scratchbase='/scratch/'+myusername+'/MONCout/'
-    projectbase='/projects/udmonc/'+myusername+'/MONCout/'
-    fullbase='/scratch/'+myusername+'/'
-else: ## e.g. laptop
-    fullbase=homedir+'/MONCin/'
-    scratchbase=homedir+'/scratch/MONCout/'
-    projectbase=homedir+'/proj/MONCout/' 
+class sconfig():
+    def __init__(self):
+        pass
+    def autoupdate(self,case,exper):
+        if 'see' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
+            self.update('see.syscfg',case,exper)
+        elif 'arc2' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
+            self.update('arc2.syscfg',case,exper)
+        elif 'xcm' in hostname: ## Met Office monsoon
+            self.update('xcm.syscfg',case,exper)
+        elif 'nid' in hostname: ## Met Office monsoon
+            self.update('xcm.syscfg',case,exper)
+        else: ## e.g. laptop
+            self.update('laptop.syscfg',case,exper)
+    def do_replace(self,targ):	    
+	targ=targ.replace("$homedir",homedir)
+        targ=targ.replace("$username",myusername)
+        targ=targ.replace("$case",self.case)
+        targ=targ.replace("$exper",self.exper)
+	return targ
+    def update(self,cfgfile,case,exper):
+        config = ConfigParser.RawConfigParser()
+        config.read(cfgfile)
+        self.case=case
+        self.exper=exper
+        # fulldir: standard location of input directories
+        # scratchdir: location of scratch space where initial postprocessing is done
+        # localdir: location where final files are stored
+        self.scratchdir=config.get("paths","scratchdir")
+        self.projectdir=config.get("paths","projectdir")
+        self.fulldir=config.get("paths","fulldir")
+        self.scratchdir=self.do_replace(self.scratchdir)
+	self.projectdir=self.do_replace(self.projectdir)
+	self.fulldir=self.do_replace(self.fulldir)

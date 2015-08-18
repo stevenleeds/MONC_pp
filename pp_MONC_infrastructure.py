@@ -37,12 +37,8 @@ import numpy
 start=time.clock() 
 numpy.seterr(invalid='ignore') # don't wine about nans
 
-case=''
-exper=''
-fulldir=''
-scratchdir=''
-projectdir=''
-
+outputconfig=opconfig()
+sysconfig=sconfig()
 ##  EXTRA DECLARATIONS FOR FAST SATURATION PHYSICS
 
 numpsatarr=zeros(350,double) # saturation pressure values numerator array
@@ -79,7 +75,7 @@ def make_filelist():
     types = {'3ddump':'*.nc'} # file type list, currently contains only 3D output to be postprocessed
     filelist={}
     for i in types:
-        filelist[i]=glob.glob(fulldir+types[i])
+        filelist[i]=glob.glob(sysconfig.fulldir+types[i])
         filelist[i].sort() 
         filelist[i].sort(key=len)       
  
@@ -196,8 +192,8 @@ def interpolate_ze_1d(array):
     return arrayze
 
 def cropped(array):
-    if(nboundlines>0):
-        return array[nboundlines:-nboundlines]
+    if(outputconfig.nboundlines>0):
+        return array[outputconfig.nboundlines:-outputconfig.nboundlines]
     else:
         return array
     
@@ -211,9 +207,9 @@ def dz_1d(field,zin):
 
 # command to get a single variable from a file
 def var_from_file(dataset,key):
-    if(nboundlines>0):
+    if(outputconfig.nboundlines>0):
         try:
-            return dataset.variables[(key)][nboundlines:-nboundlines,nboundlines:-nboundlines,:]
+            return dataset.variables[(key)][outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]
         except:
             return(nan)
     else:
@@ -242,8 +238,8 @@ def process_3doutput(processor):
 # replace missing values for reading into ncview
 # and copy to project (storage) directory
 def copy_files_to_project():
-    scratchfiles=glob.glob(scratchdir+'*'+case+'*.nc')
-    scratchfilescloud=glob.glob(scratchdir+'clouds/clouds.'+case+'*.nc')
+    scratchfiles=glob.glob(sysconfig.scratchdir+'*'+sysconfig.exper+'.nc')
+    scratchfilescloud=glob.glob(sysconfig.scratchdir+'clouds/clouds.*'+sysconfig.exper+'.nc')
     for scratchfile in scratchfiles+scratchfilescloud:
         print 'revising '+scratchfile
         print 'cpu time is '+str(time.clock()-start)
@@ -256,11 +252,11 @@ def copy_files_to_project():
                 vardata[whereinf]=nan
         scratchfiledata.close()
     for scratchfile in scratchfiles:
-        print 'copying scratch file '+scratchfile+' to '+projectdir
+        print 'copying scratch file '+scratchfile+' to '+sysconfig.projectdir
         print 'cpu time is '+str(time.clock()-start)
-        shutil.copy(scratchfile,projectdir)
-    make_tarfile(scratchdir+'clouds.'+case+'.tar',glob.glob(scratchdir+'clouds/clouds.'+case+'*.nc'))
-    shutil.copy(scratchdir+'clouds.'+case+'.tar',projectdir)
+        shutil.copy(scratchfile,sysconfig.projectdir)
+    make_tarfile(sysconfig.scratchdir+'clouds.'+sysconfig.exper+'.tar',glob.glob(sysconfig.scratchdir+'clouds/clouds.'+sysconfig.exper+'*.nc'))
+    shutil.copy(sysconfig.scratchdir+'clouds.'+sysconfig.exper+'.tar',sysconfig.projectdir)
 
 # update the variables to post-process by level type
 def update_variables():
@@ -421,11 +417,11 @@ class mask:
 class get_variable_class():
     # gv being "get variable"
     def gv(self,key):
-        if(nboundlines>0):
+        if(outputconfig.nboundlines>0):
             if key in self.varkeys:
-                return self.data.variables[(key)][nboundlines:-nboundlines,nboundlines:-nboundlines,:]
+                return self.data.variables[(key)][outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]
             else:
-                return(self.data.variables[('p')][nboundlines:-nboundlines,nboundlines:-nboundlines,:]*nan)
+                return(self.data.variables[('p')][outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]*nan)
         else:
             if key in self.varkeys:
                 return self.data.variables[(key)][:,:,:]
@@ -439,14 +435,14 @@ class get_variable_class():
             return(self.data.variables[('pref')][:]*nan) 
     # gq "get moisture variable"
     def gq(self,key,index):
-        if(nboundlines>0):
+        if(outputconfig.nboundlines>0):
             if key in self.varkeys:
                 if index<len(self.data.variables[(key)]):
-                    return self.data.variables[(key)][index,nboundlines:-nboundlines,nboundlines:-nboundlines,:]
+                    return self.data.variables[(key)][index,outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]
                 else:
                     return zeros(shape(self.data.variables[(key)][0]))
             else:
-                return(self.data.variables[('p')][nboundlines:-nboundlines,nboundlines:-nboundlines,:]*nan)
+                return(self.data.variables[('p')][outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]*nan)
         else:
             if key in self.varkeys:
                 if index<len(self.data.variables[(key)]):
@@ -502,17 +498,17 @@ class ncobject(object,get_variable_class):
         if self.active:
             self.data=[]
             self.outvars={}
-            self.ncoutname=scratchdir+outfile
+            self.ncoutname=sysconfig.scratchdir+outfile
             try:
                 os.remove(self.ncoutname)
             except:
                 pass
-            self.outfile=Dataset(self.ncoutname,'w',format='NETCDF4',zlib=lzlib)
-            self.outfile.description=description+' for '+case
+            self.outfile=Dataset(self.ncoutname,'w',format='NETCDF4',zlib=outputconfig.lzlib)
+            self.outfile.description=description+' for '+sysconfig.case+' '+sysconfig.exper
             self.outfile.history = 'Created ' + time.ctime(time.time())
             self.outfile.source = 'Created by user ' + myusername
             self.outfile.createDimension('time',0)
-            timevar=self.outfile.createVariable('time', 'f8', ('time',),zlib=lzlib)
+            timevar=self.outfile.createVariable('time', 'f8', ('time',),zlib=outputconfig.lzlib)
             setattr(timevar,'longname','time [s]')
             self.myvars=[]
             self.outfile.close()
@@ -525,7 +521,7 @@ class ncobject(object,get_variable_class):
     def opener(self,data):
         if self.active:
             self.data=data      
-            self.outfile=Dataset(self.ncoutname,'a',format='NETCDF4',zlib=lzlib)
+            self.outfile=Dataset(self.ncoutname,'a',format='NETCDF4',zlib=outputconfig.lzlib)
             if(self.tstep==0):
                 self.set_dims()
                 self.t=0
@@ -542,11 +538,11 @@ class ncobject(object,get_variable_class):
     def init_dim(self,dimname,longdimname,dimvalues,sel=None):
         if sel==None:
             self.outfile.createDimension(dimname,len(dimvalues))
-            var=self.outfile.createVariable(dimname, 'f8', (dimname,),zlib=lzlib)
+            var=self.outfile.createVariable(dimname, 'f8', (dimname,),zlib=outputconfig.lzlib)
             var[:]=dimvalues
         else:
             self.outfile.createDimension(dimname,len(sel))
-            var=self.outfile.createVariable(dimname, 'f8', (dimname,),zlib=lzlib)
+            var=self.outfile.createVariable(dimname, 'f8', (dimname,),zlib=outputconfig.lzlib)
             var[:]=dimvalues[sel]      
         setattr(var,'longname',longdimname)
     def init_dimxc(self,sel=None):
@@ -602,7 +598,7 @@ class ncobject(object,get_variable_class):
             longname=allfields[var][0]+' ('+mask+')'
             self.init_var(var+mask,longname,units,dims)         
     def init_var(self,var,longname,units,dims):
-        so=self.outfile.createVariable(var, 'f4', dims,zlib=lzlib)
+        so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib)
         so.missing_value = nan
         so.long_name=longname
         so.units=units
@@ -649,7 +645,7 @@ class statgroup_1d(ncobject):
 # general class for height integrated (min/max/liquid water path etc) output
 class statgroup_int(ncobject):    
     def __init__(self,outfile,description):
-        super(statgroup_int,self).__init__(outfile,description,ldiag_int)    
+        super(statgroup_int,self).__init__(outfile,description,outputconfig.ldiag_int)    
     def set_dims(self):
         self.init_hdims()
     def init_hdims(self):
@@ -661,7 +657,7 @@ class statgroup_int(ncobject):
 # general class for domain integrated output
 class statgroup_dom(ncobject):    
     def __init__(self,outfile,description):
-        super(statgroup_dom,self).__init__(outfile,description,ldiag_int)    
+        super(statgroup_dom,self).__init__(outfile,description,outputconfig.ldiag_int)    
     def set_dims(self):
         pass
     def make_var(self,var):
@@ -681,7 +677,7 @@ class statgroup_reduced(ncobject):
         
 class statgroupmean_xz(statgroup_reduced):    
     def __init__(self,outfile,description):
-        super(statgroupmean_xz,self).__init__(outfile,description,ldiag_xz)    
+        super(statgroupmean_xz,self).__init__(outfile,description,outputconfig.ldiag_xz)    
     def init_hdims(self):
         self.init_xdims()
     def make_var(self,var,mask=None):
@@ -689,7 +685,7 @@ class statgroupmean_xz(statgroup_reduced):
         
 class statgroupmean_yz(statgroup_reduced):    
     def __init__(self,outfile,description):
-        super(statgroupmean_yz,self).__init__(outfile,description,ldiag_yz)    
+        super(statgroupmean_yz,self).__init__(outfile,description,outputconfig.ldiag_yz)    
     def init_hdims(self):
         self.init_ydims()
     def make_var(self,var,mask=None):
@@ -697,7 +693,7 @@ class statgroupmean_yz(statgroup_reduced):
 
 class statgroupcross_xz(statgroup_reduced):    
     def __init__(self,outfile,description,sel):
-        super(statgroupcross_xz,self).__init__(outfile,description,lcross_xz)
+        super(statgroupcross_xz,self).__init__(outfile,description,outputconfig.lcross_xz)
         self.sel=sel    
     def init_hdims(self):
         self.init_xdims()
@@ -707,7 +703,7 @@ class statgroupcross_xz(statgroup_reduced):
 
 class statgroupcross_yz(statgroup_reduced):    
     def __init__(self,outfile,description,sel):
-        super(statgroupcross_yz,self).__init__(outfile,description,lcross_yz)  
+        super(statgroupcross_yz,self).__init__(outfile,description,outputconfig.lcross_yz)  
         self.sel=sel      
     def init_hdims(self):
         self.init_xdims(self.sel)
@@ -717,7 +713,7 @@ class statgroupcross_yz(statgroup_reduced):
 
 class statgroupcross_xy(statgroup_reduced):    
     def __init__(self,outfile,description,sel):
-        super(statgroupcross_xy,self).__init__(outfile,description,lcross_xy)
+        super(statgroupcross_xy,self).__init__(outfile,description,outputconfig.lcross_xy)
         self.sel=sel      
     # overwrite the vertical to make a level selection 
     def set_dims(self):
@@ -731,15 +727,15 @@ class statgroupcross_xy(statgroup_reduced):
       
 class statgroupspectra(ncobject):        
     def __init__(self,outfile,description):
-        super(statgroupspectra,self).__init__(outfile,description,lspec)
+        super(statgroupspectra,self).__init__(outfile,description,outputconfig.lspec)
         self.initiated=False
         self.force=1
     def put_make_var(self,var,field):
         if self.active:
-            for specbounds in spectralevels:
+            for speclevel in range(len(spectralevelsbot)):
                 self.get_spacing()
-                speclower=specbounds[0]
-                specupper=specbounds[1]
+                speclower=outputconfig.spectralevelsbot[speclevel]
+                specupper=outputconfig.spectralevelstop[speclevel]
                 levelstring='_'+str(speclower)+'_'+str(specupper)
                 # calculate distance between grid points
                 if self.direction=='y':
@@ -782,7 +778,7 @@ class statgroupspectra_x(statgroupspectra):
 
 class statgroupclouds(statgroup_reduced):    
     def __init__(self,outfile,description):
-        super(statgroupclouds,self).__init__(outfile,description,lclouds)
+        super(statgroupclouds,self).__init__(outfile,description,outputconfig.lclouds)
     def init_hdims(self):
         self.init_xdims()
         self.init_ydims()
@@ -790,12 +786,12 @@ class statgroupclouds(statgroup_reduced):
         self.init_varwithdims(var,['z','y','x'])
     def init_var(self,var,longname,units,dims):
         if var in ['QV','QC','QR','QS','QG','QI']:
-             so=self.outfile.createVariable(var, 'f4', dims,zlib=lzlib,least_significant_digit=6)
+             so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib,least_significant_digit=6)
              so.missing_value = nan
              so.long_name=longname
              so.units=units
         else:
-             so=self.outfile.createVariable(var, 'f4', dims,zlib=lzlib,least_significant_digit=3)
+             so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib,least_significant_digit=3)
              so.missing_value = nan
              so.long_name=longname
              so.units=units
@@ -806,22 +802,22 @@ class dataorganizer(get_variable_class):
         self.data=[]
         self.helper=[]
         self.clouds=[]
-        self.stat_1d=statgroup_1d('stat_1d.'+case+'.nc','MONC mean profile diagnostics')
-        self.samp_1d=statgroup_1d('samp_1d.'+case+'.nc','MONC sampled profile diagnostics')
-        self.cross_xz=statgroupcross_xz('cross_xz.'+case+'.nc','MONC cross-sections in the x,z plane',ysel)
-        self.cross_yz=statgroupcross_yz('cross_yz.'+case+'.nc','MONC cross-sections in the y,z plane',xsel)
-        self.cross_xy=statgroupcross_xy('cross_xy.'+case+'.nc','MONC cross-sections in the x,y plane',zsel)
-        self.stat_xz=statgroupmean_xz('stat_xz.'+case+'.nc','MONC mean diagnostics in the x,z plane')
-        self.stat_yz=statgroupmean_yz('stat_yz.'+case+'.nc','MONC mean diagnostics in the y,z plane')
-        self.stat_int=statgroup_int('stat_int.'+case+'.nc','MONC column integrated diagnostics')
-        self.stat_dom=statgroup_dom('stat_dom.'+case+'.nc','MONC domain integrated diagnostics')
-        self.spec_x=statgroupspectra_x('spec_x.'+case+'.nc','MONC spectra along the x-direction')
-        self.spec_y=statgroupspectra_y('spec_y.'+case+'.nc','MONC spectra along the y-direction')
-        if lsamp:
+        self.stat_1d=statgroup_1d('stat_1d.'+sysconfig.exper+'.nc','MONC mean profile diagnostics')
+        self.samp_1d=statgroup_1d('samp_1d.'+sysconfig.exper+'.nc','MONC sampled profile diagnostics')
+        self.cross_xz=statgroupcross_xz('cross_xz.'+sysconfig.exper+'.nc','MONC cross-sections in the x,z plane',outputconfig.ysel)
+        self.cross_yz=statgroupcross_yz('cross_yz.'+sysconfig.exper+'.nc','MONC cross-sections in the y,z plane',outputconfig.xsel)
+        self.cross_xy=statgroupcross_xy('cross_xy.'+sysconfig.exper+'.nc','MONC cross-sections in the x,y plane',outputconfig.zsel)
+        self.stat_xz=statgroupmean_xz('stat_xz.'+sysconfig.exper+'.nc','MONC mean diagnostics in the x,z plane')
+        self.stat_yz=statgroupmean_yz('stat_yz.'+sysconfig.exper+'.nc','MONC mean diagnostics in the y,z plane')
+        self.stat_int=statgroup_int('stat_int.'+sysconfig.exper+'.nc','MONC column integrated diagnostics')
+        self.stat_dom=statgroup_dom('stat_dom.'+sysconfig.exper+'.nc','MONC domain integrated diagnostics')
+        self.spec_x=statgroupspectra_x('spec_x.'+sysconfig.exper+'.nc','MONC spectra along the x-direction')
+        self.spec_y=statgroupspectra_y('spec_y.'+sysconfig.exper+'.nc','MONC spectra along the y-direction')
+        if outputconfig.lsamp:
             self.init_masks(['cld','cldupd','cldupdw1','upd','buoyx','cldbuoyx'])
         self.force=1
     def calc_masks(self):
-        if lsamp:
+        if outputconfig.lsamp:
             deltheta=self.gv('th')
             thetaref=self.gref('thref')     
             delp=self.gv('p')
@@ -911,7 +907,7 @@ class dataorganizer(get_variable_class):
         self.varkeys=self.data.variables.keys()
         timestep=self.data.variables['timestep'][0]
         self.calc_masks()
-        self.clouds=statgroupclouds("clouds/clouds."+case+".%05d.nc" %timestep,'3d in-cloud variable fields at %05d seconds' %timestep)
+        self.clouds=statgroupclouds("clouds/clouds."+sysconfig.exper+".%05d.nc" %timestep,'3d in-cloud variable fields at %05d seconds' %timestep)
         # opening and closing enables us to check the data already while it is being processed
         self.stat_1d.opener(data)
         self.samp_1d.opener(data)
@@ -945,9 +941,9 @@ class dataorganizer(get_variable_class):
         self.masked_var(var,field)
     def process_var(self,var,field):
         self.stat_1d.put_make_var(var,mean_2d(field))
-        self.cross_xz.put_make_var(var,take(field,ysel,axis=1))
-        self.cross_yz.put_make_var(var,take(field,xsel,axis=0)) 
-        self.cross_xy.put_make_var(var,take(field,zsel,axis=2))           
+        self.cross_xz.put_make_var(var,take(field,outputconfig.ysel,axis=1))
+        self.cross_yz.put_make_var(var,take(field,outputconfig.xsel,axis=0)) 
+        self.cross_xy.put_make_var(var,take(field,outputconfig.zsel,axis=2))           
         self.stat_xz.put_make_var(var,mean_xz(field))
         self.stat_yz.put_make_var(var,mean_yz(field))
         if 'makespectra' in allfields[var]:
@@ -962,7 +958,7 @@ class dataorganizer(get_variable_class):
     def ref_var(self,var,field):
         self.stat_1d.put_make_var(var,field)
     def masked_var(self,var,field):
-        if not lsamp:
+        if not outputconfig.lsamp:
             return
         elif 'xe' in allfields[var]:
             for mask in self.masks.keys():         

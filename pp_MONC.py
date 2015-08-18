@@ -47,6 +47,7 @@
 
 from pp_MONC_infrastructure import *
 import pp_MONC_infrastructure
+import argparse
    
 numpy.seterr(invalid='ignore') # don't wine about nans
 
@@ -173,7 +174,7 @@ class dataprocessor(dataorganizer):
         self.int_var('RHOWINT',self.integrate_rho_ze(w))
         self.dom_var('CC',mean_2d(nanmax(self.helper.cld,axis=2)))
 	# produce areal coverage      
-        if lsamp:
+        if pp_MONC_infrastructure.outputconfig.lsamp:
             for mask in self.masks.keys():
                self.samp_1d.put_make_sampvar('frac',mean_2d(self.masks[mask].field),mask)                 
                self.samp_1d.put_make_sampvar('fracxe',mean_2d(self.masks[mask].fieldxe),mask)           
@@ -189,38 +190,30 @@ def runme():
     process_3doutput(current_processor)
     copy_files_to_project()
 
-# currently not used, but may be useful when analysing problems
-if loadmpl:
-    import matplotlib
-    matplotlib.use('agg') # first define agg output, then continue to load rest of matplotlib and pyplot 
-    from matplotlib import *
-    from matplotlib.pyplot import *
-
 # ACTUALLY CALLS THE SCRIPT FROM THE COMMAND LINE
 # Using the construction with
 # if __name__ == "__main__"
 # makes sure we can import the separate routines
- 
+# currently not used, but may be useful when analysing problems
+
 if __name__ == "__main__":
-    incase=sys.argv[1]
-    inexper=sys.argv[2]
-    pp_MONC_infrastructure.case=incase
-    pp_MONC_infrastructure.exper=inexper
-    pp_MONC_infrastructure.fulldir=fullbase+incase+'/output/'
-    pp_MONC_infrastructure.scratchdir=scratchbase+incase+'/'
-    pp_MONC_infrastructure.projectdir=projectbase+incase+'/'
-    mkdir_p(pp_MONC_infrastructure.scratchdir)
-    mkdir_p(pp_MONC_infrastructure.scratchdir+'/clouds')
-    mkdir_p(pp_MONC_infrastructure.projectdir)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("case")
+    parser.add_argument("exper")
+    parser.add_argument ("-c", "--config", dest='config_file', default='default.cfg', type=str);
+    args=parser.parse_args()
+    pp_MONC_infrastructure.outputconfig.update(args.config_file)
+    pp_MONC_infrastructure.sysconfig.autoupdate(args.case,args.exper)
+    mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir)
+    mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir+'/clouds')
+    mkdir_p(pp_MONC_infrastructure.sysconfig.projectdir)
     runme()
 
-def runprof(incase,inexper):
-    pp_MONC_infrastructure.case=incase
-    pp_MONC_infrastructure.exper=inexper
-    pp_MONC_infrastructure.fulldir=fullbase+incase+'/output/'
-    pp_MONC_infrastructure.scratchdir=scratchbase+incase+'/'
-    pp_MONC_infrastructure.projectdir=projectbase+incase+'/'
-    mkdir_p(pp_MONC_infrastructure.scratchdir)
-    mkdir_p(pp_MONC_infrastructure.scratchdir+'/clouds')
-    mkdir_p(pp_MONC_infrastructure.projectdir)
+# another interface for profiling
+def runprof(case,exper,cfgfile='default.cfg'):
+    pp_MONC_infrastructure.outputconfig.update(cfgfile)
+    pp_MONC_infrastructure.sysconfig.autoupdate(case,exper)
+    mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir)
+    mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir+'/clouds')
+    mkdir_p(pp_MONC_infrastructure.sysconfig.projectdir)
     runme()
