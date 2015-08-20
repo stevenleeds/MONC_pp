@@ -1,3 +1,8 @@
+**NOTE**
+
+This code works with a version of MONC that puts the profiles of reference
+variables in the model dumps
+
 **LICENSE**
 
 *These programs/scripts are free software: you can redistribute it and/or modify*
