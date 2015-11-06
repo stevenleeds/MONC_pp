@@ -127,8 +127,8 @@ class dataprocessor(dataorganizer):
         thetal=theta-(rlvap/(cp*exn))*qc-(rlsub/(cp*exn))*qi
         self.process_var('THETAL',thetal) 
         del thetal
-        qsat=qsa1/(p*exp(qsa2*(t-tk0c)/(t-qsa3))-qsa4) 
-        qsati=qis1/(p*exp(qis2*(t-tk0c)/(t-qis3))-qis4) 
+        qsat=qsa1/(pref[None,None,:]*exp(qsa2*(t-tk0c)/(t-qsa3))-qsa4) 
+        qsati=qis1/(pref[None,None,:]*exp(qis2*(t-tk0c)/(t-qis3))-qis4) 
         self.process_var('QSAT',qsat) 
         self.process_var('QSATI',qsati) 
         self.process_var('RH',(qci+qv)/qsat)
