@@ -732,7 +732,7 @@ class statgroupspectra(ncobject):
         self.force=1
     def put_make_var(self,var,field):
         if self.active:
-            for speclevel in range(len(spectralevelsbot)):
+            for speclevel in range(len(outputconfig.spectralevelsbot)):
                 self.get_spacing()
                 speclower=outputconfig.spectralevelsbot[speclevel]
                 specupper=outputconfig.spectralevelstop[speclevel]
