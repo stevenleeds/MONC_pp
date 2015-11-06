@@ -1,4 +1,4 @@
 [paths]
 scratchdir=/scratch/$username/MONCout/$case/
 projectdir=/projects/udmonc/$username/MONCout/$case/
-fulldir=/scratch/$username/$case/$exper/output/
+fulldir=/scratch/$username/$case/$exper/
