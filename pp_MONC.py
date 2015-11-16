@@ -127,8 +127,8 @@ class dataprocessor(dataorganizer):
         thetal=theta-(rlvap/(cp*exn))*qc-(rlsub/(cp*exn))*qi
         self.process_var('THETAL',thetal) 
         del thetal
-        qsat=qsa1/(pref[None,None,:]*exp(qsa2*(t-tk0c)/(t-qsa3))-qsa4) 
-        qsati=qis1/(pref[None,None,:]*exp(qis2*(t-tk0c)/(t-qis3))-qis4) 
+        qsat=100.0*qsa1/(pref[None,None,:]*exp(qsa2*(t-tk0c)/(t-qsa3))-qsa4) 
+        qsati=100.0*qis1/(pref[None,None,:]*exp(qis2*(t-tk0c)/(t-qis3))-qis4) 
         self.process_var('QSAT',qsat) 
         self.process_var('QSATI',qsati) 
         self.process_var('RH',(qci+qv)/qsat)
@@ -152,7 +152,10 @@ class dataprocessor(dataorganizer):
         dqt=deviation_2d(qv+qci)
         self.stat_var('QTVAR',dqt*dqt)
         self.stat_var('RHOWQT',dqt*w*rho[None,None,:])
-        del dqt    
+        del dqt   
+        # additional scalars
+        for scalar_number in self.helper.svlist:
+            self.process_var('SCALAR%03d'%scalar_number,self.gq('q',scalar_number)) 
         # height integrated variables 
         self.int_var('WMIN',self.helper.wmin)      
         self.int_var('WMAX',self.helper.wmax)
@@ -173,7 +176,7 @@ class dataprocessor(dataorganizer):
         self.int_var('RHOUVINT',self.integrate_rho_zc(wspeed))
         self.int_var('RHOWINT',self.integrate_rho_ze(w))
         self.dom_var('CC',mean_2d(nanmax(self.helper.cld,axis=2)))
-	# produce areal coverage      
+        # produce areal coverage      
         if pp_MONC_infrastructure.outputconfig.lsamp:
             for mask in self.masks.keys():
                self.samp_1d.put_make_sampvar('frac',mean_2d(self.masks[mask].field),mask)                 
@@ -202,25 +205,31 @@ if __name__ == "__main__":
     parser.add_argument("exper")
     parser.add_argument ("-c", "--config", dest='config_file', default='default.cfg', type=str);
     parser.add_argument ("-s", "--sysconfig", dest='sysconfig_file', default=None, type=str);
+    parser.add_argument ("-o", "--overwrite", dest='overwrite',action='store_true')
     args=parser.parse_args()
     pp_MONC_infrastructure.outputconfig.update(args.config_file)
     if args.sysconfig_file==None:
-        pp_MONC_infrastructure.sysconfig.autoupdate(args.case,args.exper)
+        pp_MONC_infrastructure.sysconfig.autoupdate(args.case,args.exper,args.overwrite)
     else:
-        pp_MONC_infrastructure.sysconfig.update(args.sysconfig_file,args.case,args.exper)
+        pp_MONC_infrastructure.sysconfig.update(args.sysconfig_file,args.case,args.exper,args.overwrite)
     mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir)
     mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir+'/clouds')
     mkdir_p(pp_MONC_infrastructure.sysconfig.projectdir)
     runme()
+    print('finished copying to project: '+args.case+' '+args.exper)
+    writefinished('finished copying to project: '+args.case+' '+args.exper,pp_MONC_infrastructure.sysconfig.projectdir+'/finished.log')
 
 # another interface for profiling
-def runprof(case,exper,cfgfile='default.cfg',sysfile=None):
+def runprof(case,exper,cfgfile='default.cfg',sysfile=None,overwrite=True):
     pp_MONC_infrastructure.outputconfig.update(cfgfile)
     if sysfile==None:
-        pp_MONC_infrastructure.sysconfig.autoupdate(case,exper)
+        pp_MONC_infrastructure.sysconfig.autoupdate(case,exper,overwrite)
     else:
-        pp_MONC_infrastructure.sysconfig.update(sysfile,case,exper)
+        pp_MONC_infrastructure.sysconfig.update(sysfile,case,exper,overwrite)
     mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir)
     mkdir_p(pp_MONC_infrastructure.sysconfig.scratchdir+'/clouds')
     mkdir_p(pp_MONC_infrastructure.sysconfig.projectdir)
     runme()
+    print('finished copying to project: '+case+' '+exper)
+    writefinished('finished copying to project: '+case+' '+exper,pp_MONC_infrastructure.sysconfig.projectdir+'/finished.log')
+

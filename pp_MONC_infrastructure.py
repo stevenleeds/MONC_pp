@@ -33,12 +33,16 @@ import tarfile # for compressing the cloud field data
 import errno
 import time
 import numpy
+import os
+import datetime
+import re
    
 start=time.clock() 
 numpy.seterr(invalid='ignore') # don't wine about nans
 
 outputconfig=opconfig()
 sysconfig=sconfig()
+
 ##  EXTRA DECLARATIONS FOR FAST SATURATION PHYSICS
 
 numpsatarr=zeros(350,double) # saturation pressure values numerator array
@@ -69,12 +73,27 @@ def mkdir_p(path):
             pass
         else: raise
 
+# write a log file
+def writefinished(inputtext,outputfile):
+    outfile = open(outputfile,'wb')
+    outfile.write(inputtext)
+    outfile.write("\n")
+    outfile.write("This case was copied "+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    outfile.write("\n")
+    outfile.write("\n")
+    outfile.close()
+    
 # make a filelist of the 3D output
 def make_filelist():
     global filelist
     types = {'3ddump':'*.nc'} # file type list, currently contains only 3D output to be postprocessed
     filelist={}
     for i in types:
+        # if overwrite option given, replace the processed files
+        if sysconfig.overwrite:
+            done_list=glob.glob(sysconfig.fulldir+types[i]+'_done')
+            for file_to_process in done_list:
+                os.rename(file_to_process,file_to_process.replace('_done','')) 
         filelist[i]=glob.glob(sysconfig.fulldir+types[i])
         filelist[i].sort() 
         filelist[i].sort(key=len)       
@@ -234,6 +253,7 @@ def process_3doutput(processor):
         processor.app_tstep(moncdata,helper)
         print 'cpu time is '+str(time.clock()-start)
         moncdata.close()
+        os.rename(file_to_process,file_to_process+'_done') 
 
 # replace missing values for reading into ncview
 # and copy to project (storage) directory
@@ -264,7 +284,6 @@ def update_variables():
     allfields={}
     for i in [progfields,prevfields,derivedfields,intfields,vertfields,domfields,fracfields]:
         allfields.update(i)
-        alls=allfields.keys()
 
 def fastmoistphysics(tlisein,qtin,z,p,force=0):
     support = """
@@ -412,7 +431,7 @@ class mask:
     def setfieldze(self,field):
         self.fieldze=field
         self.ifracze=1.0/mean_2d(field)
-	            
+                
 # a class to include some methods needed for both the help-variable class (which store temp variables) and the netcdf class
 class get_variable_class():
     # gv being "get variable"
@@ -437,7 +456,7 @@ class get_variable_class():
     def gq(self,key,index):
         if(outputconfig.nboundlines>0):
             if key in self.varkeys:
-                if index<len(self.data.variables[(key)]):
+                if index<len(self.data.variables[(key)]) and index>-1:
                     return self.data.variables[(key)][index,outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]
                 else:
                     return zeros(shape(self.data.variables[(key)][0]))
@@ -445,7 +464,7 @@ class get_variable_class():
                 return(self.data.variables[('p')][outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]*nan)
         else:
             if key in self.varkeys:
-                if index<len(self.data.variables[(key)]):
+                if index<len(self.data.variables[(key)]) and index>-1:
                     return self.data.variables[(key)][index,:,:,:]
                 else:
                     return zeros(shape(self.data.variables[(key)][0]))
@@ -464,17 +483,16 @@ class get_variable_class():
 # a class to store derived variables from output which are needed relatively often       
 class nchelper(object,get_variable_class):
     def __init__(self):
-        self.tstep=0
         self.data=[]
-        self.varkeys=[]        
+        self.varkeys=[]
+        self.svlist=[]        
     def update(self,data):
         self.data=data
         self.varkeys=self.data.variables.keys()
-        self.tstep=self.tstep+1
         w=self.gv('w')
         whalf=0.5*(w[:,:,1:]+w[:,:,:-1])
         bottom=-whalf[:,:,0]
-	self.wzc=dstack((bottom[:,:,None],whalf))
+        self.wzc=dstack((bottom[:,:,None],whalf))
         self.wmin=nanmin(w,axis=2)
         self.wmax=nanmax(w,axis=2)
         qci=self.gq('q',nqc)+self.gq('q',nqi) # try to include ice
@@ -489,6 +507,23 @@ class nchelper(object,get_variable_class):
         self.rhon=self.gref('rhon')
         self.xe=self.gdim('x')
         self.ye=self.gdim('y')
+        if self.svlist==[]:
+           self.initsvlist()
+    def initsvlist(self):
+        try:
+            self.svlist=range(shape(self.data.variables[('q')])[0])
+        except:
+            self.svlist=[]
+        for qnumber in [nqv,nqc,nqi,nqs,nqg,nqh]:
+            try:
+                self.svlist.remove(qnumber)
+            except:
+                pass
+        for scalar_number in self.svlist:
+            variable_to_add={
+            'SCALAR%03d'%scalar_number:['SCALAR%03d'%scalar_number,u'-'],
+            }
+            allfields.update(variable_to_add)
 
 # a class for netcdf output                              
 class ncobject(object,get_variable_class):
@@ -498,21 +533,25 @@ class ncobject(object,get_variable_class):
         if self.active:
             self.data=[]
             self.outvars={}
+            self.description=description
             self.ncoutname=sysconfig.scratchdir+outfile
-            try:
-                os.remove(self.ncoutname)
-            except:
-                pass
-            self.outfile=Dataset(self.ncoutname,'w',format='NETCDF4',zlib=outputconfig.lzlib)
-            self.outfile.description=description+' for '+sysconfig.case+' '+sysconfig.exper
-            self.outfile.history = 'Created ' + time.ctime(time.time())
-            self.outfile.source = 'Created by user ' + myusername
-            self.outfile.createDimension('time',0)
-            timevar=self.outfile.createVariable('time', 'f8', ('time',),zlib=outputconfig.lzlib)
-            setattr(timevar,'longname','time [s]')
-            self.myvars=[]
-            self.outfile.close()
-            self.tstep=0     
+            if sysconfig.overwrite:
+                try:
+                    os.remove(self.ncoutname)
+                except:
+                    pass
+            if os.path.exists(self.ncoutname):
+                self.outfile=Dataset(self.ncoutname,'a',format='NETCDF4',zlib=outputconfig.lzlib)
+                self.outfile.history = self.outfile.history+'. Added ' + time.ctime(time.time()) +' '+myusername
+            else:
+                self.outfile=Dataset(self.ncoutname,'w',format='NETCDF4',zlib=outputconfig.lzlib)
+                self.outfile.description=self.description+' for '+sysconfig.case+' '+sysconfig.exper
+                self.outfile.history = 'Created ' + time.ctime(time.time())
+                self.outfile.source = 'Created by user ' + myusername
+                self.outfile.createDimension('time',0)
+                timevar=self.outfile.createVariable('time', 'f8', ('time',),zlib=outputconfig.lzlib)
+                setattr(timevar,'longname','time [s]')
+            self.outfile.close()    
     def make_dims(self):
         pass
     def make_var(self):
@@ -522,15 +561,31 @@ class ncobject(object,get_variable_class):
         if self.active:
             self.data=data      
             self.outfile=Dataset(self.ncoutname,'a',format='NETCDF4',zlib=outputconfig.lzlib)
-            if(self.tstep==0):
+            self.t=0
+            lenn=len(self.outfile.variables['time'])
+            if(lenn>0):
+                newtime=self.data.variables['time'][0]
+                for tt in range(lenn,0,-1):
+                    time_to_check=self.outfile.variables['time'][tt-1]
+                    print 'time_to_check '+str(time_to_check)
+                    print 'newtime '+str(newtime)
+                    if(newtime>time_to_check):
+                        self.t=tt
+                        break
+                if(self.t==0):
+                    os.remove(self.ncoutname)
+                    self.outfile=Dataset(self.ncoutname,'w',format='NETCDF4',zlib=outputconfig.lzlib)
+                    self.outfile.description=self.description+' for '+sysconfig.case+' '+sysconfig.exper
+                    self.outfile.history = 'Created ' + time.ctime(time.time())
+                    self.outfile.source = 'Created by user ' + myusername
+                    self.outfile.createDimension('time',0)
+                    timevar=self.outfile.createVariable('time', 'f8', ('time',),zlib=outputconfig.lzlib)
+                    setattr(timevar,'longname','time [s]')
+            if(self.t==0):
                 self.set_dims()
-                self.t=0
-            else:
-                self.t=len(self.outfile.variables['time'])
             self.outfile.variables['time'][self.t]=self.data.variables['time'][0]
     def closer(self):
         if self.active:
-            self.tstep=self.tstep+1
             self.outfile.close()
     # functions to initialize dimensions in output
     def set_dims(self):
@@ -549,7 +604,7 @@ class ncobject(object,get_variable_class):
         xe=self.gdim('x')
         xmin=hstack(([0],self.gdim('x')[:-1]))
         self.xc=cropped(0.5*(xmin+xe))
-	self.init_dim('xc','x [m]',self.xc,sel)    
+        self.init_dim('xc','x [m]',self.xc,sel)    
     def init_dimyc(self,sel=None):
         ye=self.gdim('y')
         ymin=hstack(([0],self.gdim('y')[:-1]))
@@ -574,21 +629,22 @@ class ncobject(object,get_variable_class):
     def init_varwithdims(self,var,dimsin,mask=None):
         # initialise a variable with correct dimensions on a staggered grid
         dimsarr=['time']
+        scalregex = re.compile('SCALAR...')
         if 'z' in dimsin:
-           if 'ze' in allfields[var]:
-              dimsarr+=['ze']
-           else:
-              dimsarr+=['zc'] 
+            if 'ze' in allfields[var]:
+                dimsarr+=['ze']
+            else:
+                dimsarr+=['zc'] 
         if 'y' in dimsin:
-           if 'ye' in allfields[var]:
-              dimsarr+=['ye']
-           else:
-              dimsarr+=['yc']        
+            if 'ye' in allfields[var]:
+                dimsarr+=['ye']
+            else:
+                dimsarr+=['yc']        
         if 'x' in dimsin:
-           if 'xe' in allfields[var]:
-              dimsarr+=['xe']
-           else:
-              dimsarr+=['xc']
+            if 'xe' in allfields[var]:
+                dimsarr+=['xe']
+            else:
+                dimsarr+=['xc']
         dims=tuple(dimsarr)
         units=allfields[var][1]
         if mask==None:
@@ -612,12 +668,12 @@ class ncobject(object,get_variable_class):
         pass # defined in subclasses       
     def put_make_var(self,var,field):
         if self.active:
-            if(self.tstep==0):
+            if(self.t==0):
                 self.make_var(var)
             self.put_var(var,field)
     def put_make_sampvar(self,var,field,mask):
         if self.active:
-            if(self.tstep==0):
+            if(self.t==0):
                 self.make_var(var,mask)
             temp=1.0*field
             whereinf=isinf(field)
@@ -751,7 +807,7 @@ class statgroupspectra(ncobject):
                 if(self.initiated==False):
                     self.init_dim('wavenr','wave number [m-1]',wavenr)
                     self.initiated=True
-                if(self.tstep==0):
+                if(self.t==0):
                     if 'ze' in allfields[var]:
                         self.ze=self.gdim('z')
                         self.init_var(var+levelstring,'power spectrum ('+self.direction+'-direction) of '+var+' at '+str(int(self.ze[speclower]))+'-'+str(int(self.ze[specupper]))+' meter (levels '+str(speclower)+'-'+str(specupper)+')','PSD',('time','wavenr'))
@@ -779,6 +835,8 @@ class statgroupspectra_x(statgroupspectra):
 class statgroupclouds(statgroup_reduced):    
     def __init__(self,outfile,description):
         super(statgroupclouds,self).__init__(outfile,description,outputconfig.lclouds)
+    def opener(self,data):
+        super(statgroupclouds,self).opener(data)
     def init_hdims(self):
         self.init_xdims()
         self.init_ydims()
@@ -786,15 +844,15 @@ class statgroupclouds(statgroup_reduced):
         self.init_varwithdims(var,['z','y','x'])
     def init_var(self,var,longname,units,dims):
         if var in ['QV','QC','QR','QS','QG','QI']:
-             so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib,least_significant_digit=6)
-             so.missing_value = nan
-             so.long_name=longname
-             so.units=units
+            so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib,least_significant_digit=6)
+            so.missing_value = nan
+            so.long_name=longname
+            so.units=units
         else:
-             so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib,least_significant_digit=3)
-             so.missing_value = nan
-             so.long_name=longname
-             so.units=units
+            so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib,least_significant_digit=3)
+            so.missing_value = nan
+            so.long_name=longname
+            so.units=units
                              
 # class for postprocessing data
 class dataorganizer(get_variable_class):
@@ -825,37 +883,37 @@ class dataorganizer(get_variable_class):
             exn=(pref/psfr)**(rd/cp)
             theta=thetaref[None,None,:]+deltheta
             t=theta*exn[None,None,:]
-            del theta,exn,deltheta,thetaref	
-	    qc=self.gq('q',nqc)
-	    qi=self.gq('q',nqi)
-	    qv=self.gq('q',nqv)
+            del theta,exn,deltheta,thetaref
+            qc=self.gq('q',nqc)
+            qi=self.gq('q',nqi)
+            qv=self.gq('q',nqv)
             tlise=t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*self.gq('q',nqc)
             qt=qc+qi+qv
-	    tv=t*(1+(rvord-1)*qv-qc-qi)
+            tv=t*(1+(rvord-1)*qv-qc-qi)
             del qv,qc,qi,t
-	    meantv=mean_2d(tv)
-	    dtv=tv-meantv[None,None,:]
-	    #tvcheck,qccheck=fastmoistphysics(tlise,qt,self.helper.zc,pref)
+            meantv=mean_2d(tv)
+            dtv=tv-meantv[None,None,:]
+            #tvcheck,qccheck=fastmoistphysics(tlise,qt,self.helper.zc,pref)
             #cldcheck=(qccheck>0.0)
             #dtvcheck=tvcheck-mean_2d(tv)
             #print mean_2d(dtvcheck)
             cldcheck=self.helper.cld
-	    self.masks['cld'].setfield(cldcheck)
+            self.masks['cld'].setfield(cldcheck)
             self.masks['cldupd'].setfield(cldcheck*(self.helper.wzc>0.0))
             self.masks['cldupdw1'].setfield(cldcheck*(self.helper.wzc>1.0))
             self.masks['upd'].setfield((self.helper.wzc>0.0))
             self.masks['buoyx'].setfield((dtv>0.0))
             self.masks['cldbuoyx'].setfield((dtv>0.0)*cldcheck)   
-	    del dtv,cldcheck
+            del dtv,cldcheck
             # PHYSICS AT XE
             wxe=interpolate_xe(self.helper.wzc)
             tlisexe=interpolate_xe(tlise)
             qtxe=interpolate_xe(qt)
             tvxe,qcxe=fastmoistphysics(tlisexe,qtxe,self.helper.zc,pref,force=self.force)
-	    self.force=0
-	    del qtxe,tlisexe
-	    dtvxe=tvxe-meantv
-	    cldxe=(qcxe>1.0e-6)
+            self.force=0
+            del qtxe,tlisexe
+            dtvxe=tvxe-meantv
+            cldxe=(qcxe>1.0e-6)
             self.masks['cld'].setfieldxe(cldxe)
             self.masks['cldupd'].setfieldxe(cldxe*(wxe>0.0))
             self.masks['cldupdw1'].setfieldxe(cldxe*(wxe>1.0))
@@ -863,14 +921,14 @@ class dataorganizer(get_variable_class):
             self.masks['buoyx'].setfieldxe((dtvxe>0.0))
             self.masks['cldbuoyx'].setfieldxe((dtvxe>0.0)*cldxe)
             del cldxe,wxe,tvxe,dtvxe
-	    # PHYSICS AT YE	    
+            # PHYSICS AT YE        
             wye=interpolate_ye(self.helper.wzc)
             tliseye=interpolate_ye(tlise)
             qtye=interpolate_ye(qt)
             tvye,qcye=fastmoistphysics(tliseye,qtye,self.helper.zc,pref)
-	    del qtye,tliseye
-	    dtvye=tvye-meantv
-	    cldye=(qcye>1.0e-6)
+            del qtye,tliseye
+            dtvye=tvye-meantv
+            cldye=(qcye>1.0e-6)
             self.masks['cld'].setfieldye(cldye)
             self.masks['cldupdw1'].setfieldye(cldye*(wye>1.0))
             self.masks['cldupd'].setfieldye(cldye*(wye>0.0))
@@ -881,12 +939,12 @@ class dataorganizer(get_variable_class):
             # PHYSICS AT ZE, TAKE INTO ACCOUNT SURFACE
             w=self.gv('w')
             qtze=interpolate_ze(qt)
-	    tliseze=interpolate_ze(tlise)
-	    prefze=interpolate_ze_1d(pref)
+            tliseze=interpolate_ze(tlise)
+            prefze=interpolate_ze_1d(pref)
             tvze,qcze=fastmoistphysics(tliseze,qtze,self.gdim('z'),prefze)
-	    del qtze,tliseze
-	    dtvze=deviation_2d(tvze)
-	    cldze=(qcze>1.0e-6)
+            del qtze,tliseze
+            dtvze=deviation_2d(tvze)
+            cldze=(qcze>1.0e-6)
             self.masks['cld'].setfieldze(cldze)
             self.masks['cldupd'].setfieldze(cldze*(w>0.0))
             self.masks['cldupdw1'].setfieldze(cldze*(w>1.0))
@@ -991,9 +1049,9 @@ class dataorganizer(get_variable_class):
     def dom_var(self,var,value):
         self.stat_dom.put_make_var(var,value)
     def integrate_rho_ze(self,field):
-        return sum(0.25*(field[:,:,1:]+field[:,:,:-1])*((self.helper.ze[1:]-self.helper.ze[0:-1])*(self.helper.rhon[1:]+self.helper.rhon[0:-1]))[None,None,:],axis=2,dtype=numpy.float64)	  
+        return sum(0.25*(field[:,:,1:]+field[:,:,:-1])*((self.helper.ze[1:]-self.helper.ze[0:-1])*(self.helper.rhon[1:]+self.helper.rhon[0:-1]))[None,None,:],axis=2,dtype=numpy.float64)      
     def integrate_rho_zc(self,field):
-        return sum(field[:,:,1:]*((self.helper.zc[1:]-self.helper.ze[0:-1])*self.helper.rhon[1:])[None,None,:],axis=2,dtype=numpy.float64)	  
+        return sum(field[:,:,1:]*((self.helper.zc[1:]-self.helper.ze[0:-1])*self.helper.rhon[1:])[None,None,:],axis=2,dtype=numpy.float64)      
     def hvort(self,u,v):
         dvdx=(vstack((v[-1,:,:][None,:,:],v[:-1,:,:]))-v[:,:,:])/(self.helper.xe[1]-self.helper.xe[0])
         dudy=(hstack((u[:,-1,:][:,None,:],u[:,:-1,:]))-u[:,:,:])/(self.helper.ye[1]-self.helper.ye[0])

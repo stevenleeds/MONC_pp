@@ -53,28 +53,29 @@ homedir = os.environ['HOME']
 class sconfig():
     def __init__(self):
         pass
-    def autoupdate(self,case,exper):
+    def autoupdate(self,case,exper,overwrite):
         if 'see' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
-            self.update('see.syscfg',case,exper)
+            self.update('see.syscfg',case,exper,overwrite)
         elif 'arc2' in hostname and 'leeds' in hostname: ## UNIVERSITY OF LEEDS
-            self.update('arc2.syscfg',case,exper)
+            self.update('arc2.syscfg',case,exper,overwrite)
         elif 'xcm' in hostname: ## Met Office monsoon
-            self.update('xcm.syscfg',case,exper)
+            self.update('xcm.syscfg',case,exper,overwrite)
         elif 'nid' in hostname: ## Met Office monsoon
-            self.update('xcm.syscfg',case,exper)
+            self.update('xcm.syscfg',case,exper,overwrite)
         else: ## e.g. laptop
-            self.update('laptop.syscfg',case,exper)
-    def do_replace(self,targ):	    
-	targ=targ.replace("$homedir",homedir)
+            self.update('laptop.syscfg',case,exper,overwrite)
+    def do_replace(self,targ):        
+        targ=targ.replace("$homedir",homedir)
         targ=targ.replace("$username",myusername)
         targ=targ.replace("$case",self.case)
         targ=targ.replace("$exper",self.exper)
-	return targ
-    def update(self,cfgfile,case,exper):
+        return targ
+    def update(self,cfgfile,case,exper,overwrite):
         config = ConfigParser.RawConfigParser()
         config.read(cfgfile)
         self.case=case
         self.exper=exper
+        self.overwrite=overwrite
         # fulldir: standard location of input directories
         # scratchdir: location of scratch space where initial postprocessing is done
         # localdir: location where final files are stored
@@ -82,5 +83,5 @@ class sconfig():
         self.projectdir=config.get("paths","projectdir")
         self.fulldir=config.get("paths","fulldir")
         self.scratchdir=self.do_replace(self.scratchdir)
-	self.projectdir=self.do_replace(self.projectdir)
-	self.fulldir=self.do_replace(self.fulldir)
+        self.projectdir=self.do_replace(self.projectdir)
+        self.fulldir=self.do_replace(self.fulldir)
