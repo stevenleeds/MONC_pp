@@ -1,0 +1,9 @@
+#!/bin/ksh 
+# 
+#PBS -N postprocjob
+#PBS -q normal 
+#PBS -l nodes=1:ppn=32 
+#PBS -l walltime=02:59:00 
+
+cd /home/stebo/MONC_pp
+aprun -n 1 -d 32 python profiler.py
