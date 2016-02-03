@@ -592,13 +592,19 @@ class ncobject(object,get_variable_class):
         pass
     def init_dim(self,dimname,longdimname,dimvalues,sel=None):
         if sel==None:
-            self.outfile.createDimension(dimname,len(dimvalues))
-            var=self.outfile.createVariable(dimname, 'f8', (dimname,),zlib=outputconfig.lzlib)
-            var[:]=dimvalues
+            try:
+                self.outfile.createDimension(dimname,len(dimvalues))
+                var=self.outfile.createVariable(dimname, 'f8', (dimname,),zlib=outputconfig.lzlib)
+                var[:]=dimvalues
+            except:
+                pass
         else:
-            self.outfile.createDimension(dimname,len(sel))
-            var=self.outfile.createVariable(dimname, 'f8', (dimname,),zlib=outputconfig.lzlib)
-            var[:]=dimvalues[sel]      
+            try:
+                self.outfile.createDimension(dimname,len(sel))
+                var=self.outfile.createVariable(dimname, 'f8', (dimname,),zlib=outputconfig.lzlib)
+                var[:]=dimvalues[sel]
+            except:
+                pass
         setattr(var,'longname',longdimname)
     def init_dimxc(self,sel=None):
         xe=self.gdim('x')
