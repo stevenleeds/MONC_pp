@@ -217,7 +217,7 @@ if __name__ == "__main__":
     mkdir_p(pp_MONC_infrastructure.sysconfig.projectdir)
     runme()
     print('finished copying to project: '+args.case+' '+args.exper)
-    writefinished('finished copying to project: '+args.case+' '+args.exper,pp_MONC_infrastructure.sysconfig.projectdir+'/finished.log')
+    writefinished('finished copying to project: '+args.case+' '+args.exper,pp_MONC_infrastructure.sysconfig.projectdir+'/finished.'+args.exper+'.log')
 
 # another interface for profiling
 def runprof(case,exper,cfgfile='default.cfg',sysfile=None,overwrite=True):
@@ -231,5 +231,5 @@ def runprof(case,exper,cfgfile='default.cfg',sysfile=None,overwrite=True):
     mkdir_p(pp_MONC_infrastructure.sysconfig.projectdir)
     runme()
     print('finished copying to project: '+case+' '+exper)
-    writefinished('finished copying to project: '+case+' '+exper,pp_MONC_infrastructure.sysconfig.projectdir+'/finished.log')
+    writefinished('finished copying to project: '+case+' '+exper,pp_MONC_infrastructure.sysconfig.projectdir+'/finished.'+exper+'.log')
 
