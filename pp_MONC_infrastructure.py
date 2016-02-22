@@ -1065,8 +1065,8 @@ class dataorganizer(get_variable_class):
     def vvort(self,u,v,w):
         dwdx=(vstack((w[-1,:,:][None,:,:],w[:-1,:,:]))-vstack((w[1:,:,:],w[0,:,:][None,:,:])))/(self.helper.xe[2]-self.helper.xe[0])
         dwdy=(hstack((w[:,-1,:][:,None,:],w[:,:-1,:]))-hstack((w[:,1:,:],w[:,0,:][:,None,:])))/(self.helper.ye[2]-self.helper.ye[0])
-        dvdz=dstack(((v[:,:,1:]-v[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0])[None,None,:],0.0*v[:,:,-1]))
-        dudz=dstack(((u[:,:,1:]-u[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0])[None,None,:],0.0*u[:,:,-1]))
+        dvdz=dstack(((v[:,:,1:]-v[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0:-1])[None,None,:],0.0*v[:,:,-1]))
+        dudz=dstack(((u[:,:,1:]-u[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0:-1])[None,None,:],0.0*u[:,:,-1]))
         vvort=sqrt((dwdy-ye_to_yc(dvdz))**2+(dudz-xe_to_xc(dwdx))**2)
         vvort[:,:,0]=0.0                            
         return vvort                            
