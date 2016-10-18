@@ -1,0 +1,4 @@
+[paths]
+scratchdir=/scratch/$case/scratch/
+projectdir=/scratch/$case/project/
+fulldir=/scratch/MONCout/$case/$exper/
