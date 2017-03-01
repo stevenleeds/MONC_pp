@@ -69,7 +69,8 @@ Python with netcdf4python, numpy and scipy (for embedding C-code with weave)
 * Easy to add a variable, and obtain a range of outputs on it.
 * Correction for staggered grids already implemented.
 * Easy to add e.g. vector operations exploiting standard python 
-  (see pp_MONC_infrastucture.py for examples, such as vorticity).
+  (see pp_MONC_infrastucture.py for examples, such as the calculation
+  of vortivity in the hvort and vvort routines).
 * Optional use of netcdf compression
   
 **KNOWN ISSUES/FEATURES**
