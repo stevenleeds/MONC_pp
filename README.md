@@ -42,7 +42,8 @@ This directory includes the following scripts
   Uses .cfg configuration files
 * fieldslist.py: Lists of variables to analyze
 * areaspectra.py: code for calculating spectra (thanks Juerg Schmidli, ETHZ)
-* .syscfg files: the settings on different systems
+* .syscfg files: the settings on different systems (e.g. paths)
+* .cfg files: the settings for different cases (e.g. bubbles on different domains)
 
 **REQUIREMENTS**
 
@@ -63,10 +64,28 @@ Python with netcdf4python, numpy and scipy (for embedding C-code with weave)
 * stat_xz.*.nc: mean diagnostics in the x,z plane
 * stat_yz.*.nc: mean diagnostics in the y,z plane
 
+**ADVANTAGES**
+
+* Easy to add a variable, and obtain a range of outputs on it.
+* Correction for staggered grids already implemented.
+* Easy to add e.g. vector operations exploiting standard python 
+  (see pp_MONC_infrastucture.py for examples, such as vorticity).
+* Optional use of netcdf compression
+  
 **KNOWN ISSUES/FEATURES**
 
-* For very large cases, one could also run out of memory (use node with more memory,
-  delete temporary variables using "del", or restructure script) or processing time
+* The code works on 3D NetCDF files that include reference profiles for pressure and
+  density, as well as the default checkpoint outputs. The reference checkpoint
+  files are not included in checkpoints on the trunk, though a ticket has
+  been raised to address the issue. SB has a version of the code that does
+  output checkpoitn profiles.
+* For very large cases, one could also run out of memory. Suggestions:
+  - use node with more memory
+  - delete temporary variables using "del", or restructure script
+* The code works in serial. In theory, it would be easy to have different nodes/
+  cores could work on different parts of the data (memory permitting). It would
+  be possible to restructure the code to use e.g. numba as well, but so far
+  there has been no need to.
 
 **EXAMPLE USAGE**
 
@@ -81,12 +100,17 @@ python pp_MONC.py bomex small_100 -c default.cfg -s xcm.syscdf
 "xcm.syscfg" sets the paths on the xcm
 
 The input files are located at e.g.
-/nfs/see-fs-01_users/"yourname"/MONCin/bomex/small_100/ (on the see systems) 
+/nfs/see-fs-01_users/"yourname"/MONCin/bomex/small_100/ (on the SEE systems in Leeds) 
+
+**AVAILABLE VARIABLES**
+
+* See fieldslist.py for a list of fields and their description.
 
 **ADDING A VARIABLE**
 
-* Append the variable to the corresponding list in fieldslist.py
-* Add the output function and the calculation of the variable to pp_MONC.py. Output funtions are
+* Append the variable to the corresponding list in fieldslist.py (see the top of this file for more details)
+
+* Add the output function and the calculation of the variable to pp_MONC.py. Output functions are
 
   process_var: process statistics and make cross sections
 

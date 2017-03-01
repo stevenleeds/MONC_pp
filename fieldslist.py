@@ -1,6 +1,7 @@
 # STRUCTURE OF THIS FILE
 # 'FIELDNAME':['description','units','arguments']
-# arguments can currently relate to staggering, taking spectra
+# arguments can currently relate to staggering ('xe'/'ye'/'ze'), 
+# or taking spectra ('makespectra')
 
 # prognostic variables at current time step
 progfields={
