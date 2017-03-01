@@ -120,6 +120,16 @@ The input files are located at e.g.
 
   ref_var: this is a reference variable profile
 
+**RETRIEVING VARIABLES FROM INPUT NETCDF**
+
+* The following functions are used: 
+
+  self.gv: get a variable
+  
+  self.gq: get a scalar
+  
+  self.gref: get a reference profile
+
 **CHANGING THE PATH OF INPUT/OUTPUT**
 
 * See pp_MONC_settings.py for default paths on a number of platforms
