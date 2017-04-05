@@ -86,7 +86,7 @@ def writefinished(inputtext,outputfile):
 # make a filelist of the 3D output
 def make_filelist():
     global filelist
-    types = {'3ddump':'*.nc'} # file type list, currently contains only 3D output to be postprocessed
+    types = {'3ddump':'pp*.nc'} # file type list, currently contains only 3D output to be postprocessed
     filelist={}
     for i in types:
         # if overwrite option given, replace the processed files
@@ -438,18 +438,18 @@ class get_variable_class():
     def gv(self,key):
         if(outputconfig.nboundlines>0):
             if key in self.varkeys:
-                return self.data.variables[(key)][outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]
+                return self.data.variables[(key)][self.step,outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]
             else:
-                return(self.data.variables[('p')][outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]*nan)
+                return(self.data.variables[('p')][self.step,outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]*nan)
         else:
             if key in self.varkeys:
-                return self.data.variables[(key)][:,:,:]
+                return self.data.variables[(key)][self.step,:,:,:]
             else:
-                return(self.data.variables[('p')][:,:,:]*nan)          
+                return(self.data.variables[('p')][self.step,:,:,:]*nan)          
     # gref being "get reference variable"
     def gref(self,key):
         if key in self.varkeys:
-            return self.data.variables[(key)][:]
+            return self.data.variables[(key)][self.step,:]
         else:
             return(self.data.variables[('pref')][:]*nan) 
     # gq "get moisture variable"
@@ -457,28 +457,37 @@ class get_variable_class():
         if(outputconfig.nboundlines>0):
             if key in self.varkeys:
                 if index<len(self.data.variables[(key)]) and index>-1:
-                    return self.data.variables[(key)][index,outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]
+                    return self.data.variables[(key)][self.step,index,outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]
                 else:
-                    return zeros(shape(self.data.variables[(key)][0]))
+                    return zeros(shape(self.data.variables[(key)][self.step,0]))
             else:
-                return(self.data.variables[('p')][outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]*nan)
+                return(self.data.variables[('p')][self.step,outputconfig.nboundlines:-outputconfig.nboundlines,outputconfig.nboundlines:-outputconfig.nboundlines,:]*nan)
         else:
             if key in self.varkeys:
                 if index<len(self.data.variables[(key)]) and index>-1:
-                    return self.data.variables[(key)][index,:,:,:]
+                    return self.data.variables[(key)][self.step,index,:,:,:]
                 else:
-                    return zeros(shape(self.data.variables[(key)][0]))
+                    return zeros(shape(self.data.variables[(key)][self.step,0]))
             else:
-                return(self.data.variables[('p')][:,:,:]*nan)    
+                return(self.data.variables[('p')][self.step,:,:,:]*nan)    
     # gdim being "get dimension"
     def gdim(self,key):
         try:
             return self.data.variables[(key)][:]
         except:
             try:
-                return xrange(len(self.data.dimensions[(key)]))
+                return array(range(len(self.data.dimensions[(key)])))
             except:
                 return([nan]) 
+    # gdim being "get dimension"
+    def gdimt(self,key):
+        try:
+            return self.data.variables[(key)][0,:]
+        except:
+            try:
+                return array(range(len(self.data.dimensions[(key)][0,:])))
+            except:
+                return([nan])
                 
 # a class to store derived variables from output which are needed relatively often       
 class nchelper(object,get_variable_class):
@@ -488,6 +497,7 @@ class nchelper(object,get_variable_class):
         self.svlist=[]        
     def update(self,data):
         self.data=data
+	self.step=0
         self.varkeys=self.data.variables.keys()
         w=self.gv('w')
         whalf=0.5*(w[:,:,1:]+w[:,:,:-1])
@@ -498,8 +508,8 @@ class nchelper(object,get_variable_class):
         qci=self.gq('q',nqc)+self.gq('q',nqi) # try to include ice
         self.cld=(qci>1.0e-6)
         self.cloudycolumn=1.0*(sum(self.cld,axis=2)>0)
-        zmin=self.gdim('z')[:-1]
-        zplus=self.gdim('z')[1:]
+        zmin=self.gdimt('z')[:-1]
+        zplus=self.gdimt('z')[1:]
         zhalf=0.5*(zmin+zplus)
         bottom=-zhalf[0]
         self.zc=hstack(([bottom],zhalf))
@@ -561,10 +571,13 @@ class ncobject(object,get_variable_class):
         if self.active:
             self.data=data      
             self.outfile=Dataset(self.ncoutname,'a',format='NETCDF4',zlib=outputconfig.lzlib)
+    def opener2(self,datai,step):
+        self.step=step
+        if self.active:
             self.t=0
             lenn=len(self.outfile.variables['time'])
             if(lenn>0):
-                newtime=self.data.variables['time'][0]
+                newtime=self.data.variables['time'][self.step]
                 for tt in range(lenn,0,-1):
                     time_to_check=self.outfile.variables['time'][tt-1]
                     print 'time_to_check '+str(time_to_check)
@@ -583,7 +596,7 @@ class ncobject(object,get_variable_class):
                     setattr(timevar,'longname','time [s]')
             if(self.t==0):
                 self.set_dims()
-            self.outfile.variables['time'][self.t]=self.data.variables['time'][0]
+            self.outfile.variables['time'][self.t]=self.data.variables['time'][self.step]
     def closer(self):
         if self.active:
             self.outfile.close()
@@ -605,7 +618,10 @@ class ncobject(object,get_variable_class):
                 var[:]=dimvalues[sel]
             except:
                 pass
-        setattr(var,'longname',longdimname)
+        try:
+            setattr(var,'longname',longdimname)
+        except:
+            pass
     def init_dimxc(self,sel=None):
         xe=self.gdim('x')
         xmin=hstack(([0],self.gdim('x')[:-1]))
@@ -617,8 +633,8 @@ class ncobject(object,get_variable_class):
         self.yc=cropped(0.5*(ymin+ye))
         self.init_dim('yc','y [m]',self.yc,sel)
     def init_dimzc(self,sel=None):                      
-        zmin=self.gdim('z')[:-1]
-        zplus=self.gdim('z')[1:]
+        zmin=self.gdimt('z')[:-1]
+        zplus=self.gdimt('z')[1:]
         zhalf=0.5*(zmin+zplus)
         bottom=-zhalf[0]
         self.zc=hstack(([bottom],zhalf))
@@ -630,7 +646,7 @@ class ncobject(object,get_variable_class):
         self.ye=cropped(self.gdim('y'))
         self.init_dim('ye','y [m] (staggered)',self.ye,sel)
     def init_dimze(self,sel=None):
-        self.ze=self.gdim('z')
+        self.ze=self.gdimt('z')
         self.init_dim('ze','height [m] (bottom staggered)',self.ze,sel)
     def init_varwithdims(self,var,dimsin,mask=None):
         # initialise a variable with correct dimensions on a staggered grid
@@ -815,11 +831,11 @@ class statgroupspectra(ncobject):
                     self.initiated=True
                 if(self.t==0):
                     if 'ze' in allfields[var]:
-                        self.ze=self.gdim('z')
+                        self.ze=self.gdimt('z')
                         self.init_var(var+levelstring,'power spectrum ('+self.direction+'-direction) of '+var+' at '+str(int(self.ze[speclower]))+'-'+str(int(self.ze[specupper]))+' meter (levels '+str(speclower)+'-'+str(specupper)+')','PSD',('time','wavenr'))
                     else:
-                        zmin=self.gdim('z')[:-1]
-                        zplus=self.gdim('z')[1:]
+                        zmin=self.gdimt('z')[:-1]
+                        zplus=self.gdimt('z')[1:]
                         zhalf=0.5*(zmin+zplus)
                         bottom=-zhalf[0]
                         self.zc=hstack(([bottom],zhalf))
@@ -947,7 +963,7 @@ class dataorganizer(get_variable_class):
             qtze=interpolate_ze(qt)
             tliseze=interpolate_ze(tlise)
             prefze=interpolate_ze_1d(pref)
-            tvze,qcze=fastmoistphysics(tliseze,qtze,self.gdim('z'),prefze)
+            tvze,qcze=fastmoistphysics(tliseze,qtze,self.gdimt('z'),prefze)
             del qtze,tliseze
             dtvze=deviation_2d(tvze)
             cldze=(qcze>1.0e-6)
@@ -962,16 +978,11 @@ class dataorganizer(get_variable_class):
         self.masks={}
         for maskname in masks:
             self.masks[maskname]=mask()
-    def app_tstep(self,data):
-        self.data=data
-        self.varkeys=self.data.variables.keys()
     def app_tstep(self,data,helper):
         self.data=data
         self.helper=helper
         self.varkeys=self.data.variables.keys()
-        timestep=self.data.variables['timestep'][0]
-        self.calc_masks()
-        self.clouds=statgroupclouds("clouds/clouds."+sysconfig.exper+".%05d.nc" %timestep,'3d in-cloud variable fields at %05d seconds' %timestep)
+  	nsteps=len(self.data.variables['timestep'])
         # opening and closing enables us to check the data already while it is being processed
         self.stat_1d.opener(data)
         self.samp_1d.opener(data)
@@ -982,10 +993,27 @@ class dataorganizer(get_variable_class):
         self.stat_yz.opener(data)
         self.stat_int.opener(data)
         self.stat_dom.opener(data)
-        self.clouds.opener(data)
         self.spec_x.opener(data)
         self.spec_y.opener(data)
-        self.processor()
+	for step in range(nsteps):
+	    self.step=step
+            self.stat_1d.opener2(data,step)
+            self.samp_1d.opener2(data,step)
+            self.cross_xz.opener2(data,step)
+            self.cross_yz.opener2(data,step)
+            self.cross_xy.opener2(data,step)
+            self.stat_xz.opener2(data,step)
+            self.stat_yz.opener2(data,step)
+            self.stat_int.opener2(data,step)
+            self.stat_dom.opener2(data,step)
+            self.spec_x.opener2(data,step)
+            self.spec_y.opener2(data,step)
+	    self.calc_masks()
+	    timestep=self.data.variables['timestep'][self.step]
+            self.clouds=statgroupclouds("clouds/clouds."+sysconfig.exper+".%05d.nc" %timestep,'3d in-cloud variable fields at %05d seconds' %timestep)
+            self.clouds.opener(data)
+            self.clouds.opener2(data,step)
+            self.processor()
         self.stat_1d.closer()
         self.samp_1d.closer()
         self.cross_xz.closer()
