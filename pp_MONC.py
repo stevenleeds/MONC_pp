@@ -59,15 +59,15 @@ class dataprocessor(dataorganizer):
     # int_var: this is a height integrated variable
     # ref_var: this is a reference variable
     def processor(self):
-        u=self.gv('u')
-        v=self.gv('v')
+        u=self.gv('u_nogal')
+        v=self.gv('v_nogal')
         w=self.gv('w')
         deltheta=self.gv('th')
         thetaref=self.gref('thref')
         delp=self.gv('p')
-        qv=self.gq('q',nqv)
-        qc=self.gq('q',nqc)
-        qi=self.gq('q',nqi)
+        qv=self.gv('q_vapour')
+        qc=self.gv('q_cloud_liquid_mass')
+        qi=0.0*qc
         qci=qc+qi
         pref=self.gref('prefn')
         p=delp+pref[None,None,:]
@@ -154,8 +154,8 @@ class dataprocessor(dataorganizer):
         self.stat_var('RHOWQT',dqt*w*rho[None,None,:])
         del dqt   
         # additional scalars
-        for scalar_number in self.helper.svlist:
-            self.process_var('SCALAR%03d'%scalar_number,self.gq('q',scalar_number)) 
+        #for scalar_number in self.helper.svlist:
+        #    self.process_var('SCALAR%03d'%scalar_number,self.gq('q',scalar_number)) 
         # height integrated variables 
         self.int_var('WMIN',self.helper.wmin)      
         self.int_var('WMAX',self.helper.wmax)

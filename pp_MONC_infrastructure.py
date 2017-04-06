@@ -505,7 +505,7 @@ class nchelper(object,get_variable_class):
         self.wzc=dstack((bottom[:,:,None],whalf))
         self.wmin=nanmin(w,axis=2)
         self.wmax=nanmax(w,axis=2)
-        qci=self.gq('q',nqc)+self.gq('q',nqi) # try to include ice
+        qci=self.gv('q_cloud_liquid_mass') # try to include ice
         self.cld=(qci>1.0e-6)
         self.cloudycolumn=1.0*(sum(self.cld,axis=2)>0)
         zmin=self.gdimt('z')[:-1]
@@ -513,7 +513,7 @@ class nchelper(object,get_variable_class):
         zhalf=0.5*(zmin+zplus)
         bottom=-zhalf[0]
         self.zc=hstack(([bottom],zhalf))
-        self.ze=self.gdim('z')
+        self.ze=self.gdimt('z')
         self.rhon=self.gref('rhon')
         self.xe=self.gdim('x')
         self.ye=self.gdim('y')
@@ -906,13 +906,13 @@ class dataorganizer(get_variable_class):
             theta=thetaref[None,None,:]+deltheta
             t=theta*exn[None,None,:]
             del theta,exn,deltheta,thetaref
-            qc=self.gq('q',nqc)
-            qi=self.gq('q',nqi)
-            qv=self.gq('q',nqv)
-            tlise=t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*self.gq('q',nqc)
-            qt=qc+qi+qv
+            qc=self.gv('q_cloud_liquid_mass')
+            qi=0.0*qc
+            qv=self.gq('q_vapour')
+            tlise=t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qv-(rlsub/cp)*qi
+            qt=qc+qv+qi
             tv=t*(1+(rvord-1)*qv-qc-qi)
-            del qv,qc,qi,t
+            del qv,qc,qc,t
             meantv=mean_2d(tv)
             dtv=tv-meantv[None,None,:]
             #tvcheck,qccheck=fastmoistphysics(tlise,qt,self.helper.zc,pref)
