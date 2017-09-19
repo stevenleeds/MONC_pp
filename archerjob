@@ -1,7 +1,7 @@
 #!/bin/bash --login
 #PBS -N MONC
 #PBS -l select=1
-#PBS -l walltime=03:00:00
+#PBS -l walltime=12:00:00
 #PBS -j oe
 #q short
 
@@ -18,4 +18,4 @@ module load pc-scipy
 
 cd /work/n02/n02/sboeing/MONC_pp
 #aprun -n 1 -d 24 python test.py
-aprun -n 1 -d 24 python pp_MONC.py -c bubble_500.cfg -s archer.syscfg warm_pert_2017 000
+aprun -n 1 -d 24 python pp_MONC.py -c bubble_500.cfg -s archer.syscfg warm_pert_2017 000 --overwrite

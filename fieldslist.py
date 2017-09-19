@@ -90,6 +90,7 @@ derivedfields={
 'VVORT':['vertical component of the vorticity vector',u's-1','ze'],
 'BVWET2EXC':['moist BV frequency squared excess',u's-2','ze'],
 'BG':['buoyancy generation',u'kg m-1 s-3','ze'],
+'TRACER':['tracer concentration',u'-'],
 }
 
 # vertically integrated/maximum/minimum variables
@@ -123,6 +124,19 @@ fracfields={
 # domain only variables
 domfields={
 'CC':['cloud cover',u'-'],
+'TRACER_C':['tracer concentration',u'-'],
+'TRACER_CC':['tracer concentration squared',u'-'],
+'TRACER_CCC':['tracer concentration cubed',u'-'],
+'TRACER_CB':['tracer buoyancy',u'm s-2'],
+'TRACER_CCB':['tracer squared buoyancy',u'm s-2'],
+'TRACER_CW':['tracer vertical velocity',u'm s-1','ze'],
+'TRACER_CCW':['tracer squared vertical velocity',u'm s-1','ze'],
+'TRACER_CZ':['tracer height',u'm'],
+'TRACER_CCZ':['tracer squared height',u'm'],
+'TRACER_CQ':['tracer qt',u'-'],
+'TRACER_CCQ':['tracer squared qt',u'-'],
+'TRACER_CH':['tracer MSE temperature',u'K'],
+'TRACER_CCH':['tracer squared MSE temperature',u'K'],
 }
 
 # variables with vertical dependence only
@@ -133,6 +147,19 @@ vertfields={
 'EXNREF':['anelastic exner function',u'-'],
 'PREF':['anelastic reference pressure',u'-'],
 'THETAREF':['anelastic reference temperature',u'-'],
-'BVDRY2':['BV frequency squared',u's-2','ze']
+'BVDRY2':['BV frequency squared',u's-2','ze'],
+'TRACERPROF_C':['tracer concentration',u'-'],
+'TRACERPROF_CC':['tracer concentration squared',u'-'],
+'TRACERPROF_CCC':['tracer concentration cubed',u'-'],
+'TRACERPROF_CB':['tracer buoyancy',u'm s-2'],
+'TRACERPROF_CCB':['tracer squared buoyancy',u'm s-2'],
+'TRACERPROF_CW':['tracer vertical velocity',u'm s-1','ze'],
+'TRACERPROF_CCW':['tracer squared vertical velocity',u'm s-1','ze'],
+'TRACERPROF_CZ':['tracer height',u'm'],
+'TRACERPROF_CCZ':['tracer squared height',u'm'],
+'TRACERPROF_CQ':['tracer qt',u'-'],
+'TRACERPROF_CCQ':['tracer squared qt',u'-'],
+'TRACERPROF_CH':['tracer MSE temperature',u'K'],
+'TRACERPROF_CCH':['tracer squared MSE temperature',u'K'],
 }
 

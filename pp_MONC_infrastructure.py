@@ -86,7 +86,7 @@ def writefinished(inputtext,outputfile):
 # make a filelist of the 3D output
 def make_filelist():
     global filelist
-    types = {'3ddump':'pp*.nc'} # file type list, currently contains only 3D output to be postprocessed
+    types = {'3ddump':'3d_*.nc'} # file type list, currently contains only 3D output to be postprocessed
     filelist={}
     for i in types:
         # if overwrite option given, replace the processed files
@@ -249,7 +249,6 @@ def process_3doutput(processor):
     for file_to_process in filelist['3ddump']:
         print 'processing '+file_to_process
         moncdata=Dataset(file_to_process,'r',format='NETCDF4')
-        helper.update(moncdata)
         processor.app_tstep(moncdata,helper)
         print 'cpu time is '+str(time.clock()-start)
         moncdata.close()
@@ -495,9 +494,9 @@ class nchelper(object,get_variable_class):
         self.data=[]
         self.varkeys=[]
         self.svlist=[]        
-    def update(self,data):
+    def update(self,data,step):
         self.data=data
-	self.step=0
+	self.step=step
         self.varkeys=self.data.variables.keys()
         w=self.gv('w')
         whalf=0.5*(w[:,:,1:]+w[:,:,:-1])
@@ -515,8 +514,8 @@ class nchelper(object,get_variable_class):
         self.zc=hstack(([bottom],zhalf))
         self.ze=self.gdimt('z')
         self.rhon=self.gref('rhon')
-        self.xe=self.gdim('x')
-        self.ye=self.gdim('y')
+        self.xe=self.gdim('x')*self.data.variables['x_resolution'][self.step]
+        self.ye=self.gdim('y')*self.data.variables['y_resolution'][self.step]
         if self.svlist==[]:
            self.initsvlist()
     def initsvlist(self):
@@ -623,13 +622,13 @@ class ncobject(object,get_variable_class):
         except:
             pass
     def init_dimxc(self,sel=None):
-        xe=self.gdim('x')
-        xmin=hstack(([0],self.gdim('x')[:-1]))
+        xe=self.gdim('x')*self.data.variables['x_resolution'][self.step]
+        xmin=hstack(([0],xe[:-1]))
         self.xc=cropped(0.5*(xmin+xe))
         self.init_dim('xc','x [m]',self.xc,sel)    
     def init_dimyc(self,sel=None):
-        ye=self.gdim('y')
-        ymin=hstack(([0],self.gdim('y')[:-1]))
+        ye=self.gdim('y')*self.data.variables['y_resolution'][self.step]
+        ymin=hstack(([0],ye[:-1]))
         self.yc=cropped(0.5*(ymin+ye))
         self.init_dim('yc','y [m]',self.yc,sel)
     def init_dimzc(self,sel=None):                      
@@ -640,10 +639,10 @@ class ncobject(object,get_variable_class):
         self.zc=hstack(([bottom],zhalf))
         self.init_dim('zc','height [m]',self.zc,sel)    
     def init_dimxe(self,sel=None):
-        self.xe=cropped(self.gdim('x')) 
+        self.xe=cropped(self.gdim('x')*self.data.variables['x_resolution'][self.step]) 
         self.init_dim('xe','x [m] (staggered)',self.xe,sel)
     def init_dimye(self,sel=None):
-        self.ye=cropped(self.gdim('y'))
+        self.ye=cropped(self.gdim('y')*self.data.variables['y_resolution'][self.step])
         self.init_dim('ye','y [m] (staggered)',self.ye,sel)
     def init_dimze(self,sel=None):
         self.ze=self.gdimt('z')
@@ -844,13 +843,13 @@ class statgroupspectra(ncobject):
                 
 class statgroupspectra_y(statgroupspectra):        
     def get_spacing(self):
-        y=self.gdim('y')
+        y=self.gdim('y')*self.data.variables['y_resolution'][self.step]
         self.dgrid=y[1]-y[0]
         self.direction='y'
         
 class statgroupspectra_x(statgroupspectra):        
     def get_spacing(self):
-        x=self.gdim('x')
+        x=self.gdim('x')*self.data.variables['x_resolution'][self.step]
         self.dgrid=x[1]-x[0]
         self.direction='x'
 
@@ -894,7 +893,7 @@ class dataorganizer(get_variable_class):
         self.spec_x=statgroupspectra_x('spec_x.'+sysconfig.exper+'.nc','MONC spectra along the x-direction')
         self.spec_y=statgroupspectra_y('spec_y.'+sysconfig.exper+'.nc','MONC spectra along the y-direction')
         if outputconfig.lsamp:
-            self.init_masks(['cld','cldupd','cldupdw1','upd','buoyx','cldbuoyx'])
+            self.init_masks(['cld','cldupd','cldupdw1','upd','buoyx','cldbuoyx','qmask10','qmask100'])
         self.force=1
     def calc_masks(self):
         if outputconfig.lsamp:
@@ -908,11 +907,13 @@ class dataorganizer(get_variable_class):
             del theta,exn,deltheta,thetaref
             qc=self.gv('q_cloud_liquid_mass')
             qi=0.0*qc
-            qv=self.gq('q_vapour')
+            qv=self.gv('q_vapour')
+            q3=self.gv('q_qfield_3')
+            maxq3=nanmax(q3)
             tlise=t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qv-(rlsub/cp)*qi
             qt=qc+qv+qi
             tv=t*(1+(rvord-1)*qv-qc-qi)
-            del qv,qc,qc,t
+            del qv,qc,qi,t
             meantv=mean_2d(tv)
             dtv=tv-meantv[None,None,:]
             #tvcheck,qccheck=fastmoistphysics(tlise,qt,self.helper.zc,pref)
@@ -926,9 +927,12 @@ class dataorganizer(get_variable_class):
             self.masks['upd'].setfield((self.helper.wzc>0.0))
             self.masks['buoyx'].setfield((dtv>0.0))
             self.masks['cldbuoyx'].setfield((dtv>0.0)*cldcheck)   
+            self.masks['qmask10'].setfield((q3>0.1*maxq3))   
+            self.masks['qmask100'].setfield((q3>0.01*maxq3))   
             del dtv,cldcheck
             # PHYSICS AT XE
             wxe=interpolate_xe(self.helper.wzc)
+            q3xe=interpolate_xe(q3)
             tlisexe=interpolate_xe(tlise)
             qtxe=interpolate_xe(qt)
             tvxe,qcxe=fastmoistphysics(tlisexe,qtxe,self.helper.zc,pref,force=self.force)
@@ -942,9 +946,12 @@ class dataorganizer(get_variable_class):
             self.masks['upd'].setfieldxe((wxe>0.0))
             self.masks['buoyx'].setfieldxe((dtvxe>0.0))
             self.masks['cldbuoyx'].setfieldxe((dtvxe>0.0)*cldxe)
-            del cldxe,wxe,tvxe,dtvxe
+            self.masks['qmask10'].setfieldxe((q3xe>0.1*maxq3))   
+            self.masks['qmask100'].setfieldxe((q3xe>0.01*maxq3))   
+            del cldxe,wxe,tvxe,dtvxe,q3xe
             # PHYSICS AT YE        
             wye=interpolate_ye(self.helper.wzc)
+            q3ye=interpolate_ye(q3)
             tliseye=interpolate_ye(tlise)
             qtye=interpolate_ye(qt)
             tvye,qcye=fastmoistphysics(tliseye,qtye,self.helper.zc,pref)
@@ -957,9 +964,12 @@ class dataorganizer(get_variable_class):
             self.masks['upd'].setfieldye((wye>0.0))
             self.masks['buoyx'].setfieldye((dtvye>0.0))
             self.masks['cldbuoyx'].setfieldye((dtvye>0.0)*cldye)
-            del cldye,wye,tvye,dtvye
+            self.masks['qmask10'].setfieldye((q3ye>0.1*maxq3))   
+            self.masks['qmask100'].setfieldye((q3ye>0.01*maxq3))   
+            del cldye,wye,tvye,dtvye,q3ye
             # PHYSICS AT ZE, TAKE INTO ACCOUNT SURFACE
             w=self.gv('w')
+            q3ze=interpolate_ze(q3)
             qtze=interpolate_ze(qt)
             tliseze=interpolate_ze(tlise)
             prefze=interpolate_ze_1d(pref)
@@ -973,7 +983,9 @@ class dataorganizer(get_variable_class):
             self.masks['upd'].setfieldze((w>0.0))    
             self.masks['buoyx'].setfieldze((dtvze>0.0))
             self.masks['cldbuoyx'].setfieldze((dtvze>0.0)*cldze)
-            del cldze,w,tvze,dtvze
+            self.masks['qmask10'].setfieldze((q3ze>0.1*maxq3))   
+            self.masks['qmask100'].setfieldze((q3ze>0.01*maxq3))   
+            del cldze,w,tvze,dtvze,q3ze
     def init_masks(self,masks):
         self.masks={}
         for maskname in masks:
@@ -997,6 +1009,7 @@ class dataorganizer(get_variable_class):
         self.spec_y.opener(data)
 	for step in range(nsteps):
 	    self.step=step
+            helper.update(data,step)
             self.stat_1d.opener2(data,step)
             self.samp_1d.opener2(data,step)
             self.cross_xz.opener2(data,step)

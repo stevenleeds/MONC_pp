@@ -67,6 +67,7 @@ class dataprocessor(dataorganizer):
         delp=self.gv('p')
         qv=self.gv('q_vapour')
         qc=self.gv('q_cloud_liquid_mass')
+        q3=self.gv('q_qfield_3')
         qi=0.0*qc
         qci=qc+qi
         pref=self.gref('prefn')
@@ -81,10 +82,12 @@ class dataprocessor(dataorganizer):
         self.process_var('QV',qv)
         qt=qci+qv
         self.process_var('QT',qt)
+        self.process_var('TRACER',q3)
         self.process_var('THETA',theta)  
         self.process_var('P',p)
         self.process_var('T',t)
         self.process_var('TMSE',t+(grav/cp)*self.helper.zc[None,None,:]+(rlvap/cp)*qv-((rlsub-rlvap)/cp)*qi)
+        tmse=t+(grav/cp)*self.helper.zc[None,None,:]+(rlvap/cp)*qv-((rlsub-rlvap)/cp)*qi
         tlise=t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qc-(rlsub/cp)*qi
         self.process_var('TLISE',tlise)
         zcplus=self.helper.zc+5.0
@@ -115,6 +118,33 @@ class dataprocessor(dataorganizer):
         self.ref_var('BVDRY2',bvdry2)
         self.process_var('BVWET2EXC',bvwet2-bvdry2)
         self.process_var('BG',rho[None,None,:]*w*(bvwet2-bvdry2))
+        rq3=rhon[None,None,:]*q3
+        self.dom_var('TRACER_C',mean(rq3))
+        self.dom_var('TRACER_CC',mean(rq3*rq3))
+        self.dom_var('TRACER_CCC',mean(rq3*rq3*rq3))
+        self.dom_var('TRACER_CB',mean(rq3*buoyx))
+        self.dom_var('TRACER_CCB',mean(rq3*rq3*buoyx))
+        self.dom_var('TRACER_CW',mean(interpolate_ze(rq3)*w))
+        self.dom_var('TRACER_CCW',mean(interpolate_ze(rq3*rq3)*w))
+        self.dom_var('TRACER_CZ',mean(rq3*self.helper.zc[None,None,:]))
+        self.dom_var('TRACER_CCZ',mean(rq3*rq3*self.helper.zc[None,None,:]))
+        self.dom_var('TRACER_CQ',mean(rq3*qt))
+        self.dom_var('TRACER_CCQ',mean(rq3*rq3*qt))
+        self.dom_var('TRACER_CH',mean(rq3*tmse))
+        self.dom_var('TRACER_CCH',mean(rq3*rq3*tmse))
+        self.ref_var('TRACERPROF_C',mean_2d(rq3))
+        self.ref_var('TRACERPROF_CC',mean_2d(rq3*rq3))
+        self.ref_var('TRACERPROF_CCC',mean_2d(rq3*rq3*rq3))
+        self.ref_var('TRACERPROF_CB',mean_2d(rq3*buoyx))
+        self.ref_var('TRACERPROF_CCB',mean_2d(rq3*rq3*buoyx))
+        self.ref_var('TRACERPROF_CW',mean_2d(interpolate_ze(rq3)*w))
+        self.ref_var('TRACERPROF_CCW',mean_2d(interpolate_ze(rq3*rq3)*w))
+        self.ref_var('TRACERPROF_CZ',mean_2d(rq3*self.helper.zc[None,None,:]))
+        self.ref_var('TRACERPROF_CCZ',mean_2d(rq3*rq3*self.helper.zc[None,None,:]))
+        self.ref_var('TRACERPROF_CQ',mean_2d(rq3*qt))
+        self.ref_var('TRACERPROF_CCQ',mean_2d(rq3*rq3*qt))
+        self.ref_var('TRACERPROF_CH',mean_2d(rq3*tmse))
+        self.ref_var('TRACERPROF_CCH',mean_2d(rq3*rq3*tmse))
         del thetarhox,bvdry2,bvwet2
         dp=deviation_2d(p)
         self.process_var('DP',dp)
@@ -127,8 +157,8 @@ class dataprocessor(dataorganizer):
         thetal=theta-(rlvap/(cp*exn))*qc-(rlsub/(cp*exn))*qi
         self.process_var('THETAL',thetal) 
         del thetal
-        qsat=100.0*qsa1/(pref[None,None,:]*exp(qsa2*(t-tk0c)/(t-qsa3))-qsa4) 
-        qsati=100.0*qis1/(pref[None,None,:]*exp(qis2*(t-tk0c)/(t-qis3))-qis4) 
+        qsat=qsa1/(0.01*pref[None,None,:]*exp(qsa2*(t-tk0c)/(t-qsa3))-qsa4) 
+        qsati=qis1/(0.01*pref[None,None,:]*exp(qis2*(t-tk0c)/(t-qis3))-qis4) 
         self.process_var('QSAT',qsat) 
         self.process_var('QSATI',qsati) 
         self.process_var('RH',(qci+qv)/qsat)
@@ -175,7 +205,7 @@ class dataprocessor(dataorganizer):
         self.int_var('MAXWINDHEIGHT',nanmax((wspeed>nanmax(wspeed,axis=2)[:,:,None]-1e-5)*self.helper.ze[None,None,:],axis=2))
         self.int_var('RHOUVINT',self.integrate_rho_zc(wspeed))
         self.int_var('RHOWINT',self.integrate_rho_ze(w))
-        self.dom_var('CC',mean_2d(nanmax(self.helper.cld,axis=2)))
+        self.dom_var('CC',mean(nanmax(self.helper.cld,axis=2)))
         # produce areal coverage      
         if pp_MONC_infrastructure.outputconfig.lsamp:
             for mask in self.masks.keys():
