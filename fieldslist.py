@@ -7,6 +7,7 @@
 progfields={
 'THETA':['potential temperature',u'K'],
 'P':['pressure',u'Pa'],
+'BUOYP':['pressure excluding buoyancy',u'Pa'],
 'U':['wind speed in x direction',u'm s-1','xe','makespectra'],
 'V':['wind speed in y direction',u'm s-1','ye','makespectra'],
 'W':['wind speed in z direction',u'm s-1','ze','makespectra'],
@@ -84,13 +85,19 @@ derivedfields={
 'KM':['eddy viscosity',u'm-1 s-1'],
 'DP':['pressure perturbation with respect to slab mean',u'Pa'],
 'DPDZ':['pressure gradient term',u'm s-2'],
+'DBUOYP':['buoyancy pressure perturbation with respect to slab mean',u'Pa'],
+'DBUOYPDZ':['buoyancy pressure gradient term',u'm s-2'],
 'RHOWBMINP':['bouyancy minus pressure gradient term',u'kg m-1 s-3'],
 'BMINP':['bouyancy minus pressure gradient term',u'm s-2'],
-'HVORT':['horizontal component of the vorticity vector',u's-1'],
-'VVORT':['vertical component of the vorticity vector',u's-1','ze'],
+'HVORT':['horizontal component of the vorticity vector',u's-1','xe','ye'],
+'VVORT':['vertical component of the vorticity vector magnitude',u's-1','ze'],
+'TVORT':['total vorticity vector magnitude',u's-1'],
 'BVWET2EXC':['moist BV frequency squared excess',u's-2','ze'],
 'BG':['buoyancy generation',u'kg m-1 s-3','ze'],
 'TRACER':['tracer concentration',u'-'],
+'OO':['vorticity tensor magnitude',u's-2'],
+'SS':['rate of strain tensor magnitude',u's-2'],
+'QCRITERION':['Q criterion',u's-2'],
 }
 
 # vertically integrated/maximum/minimum variables
@@ -137,6 +144,14 @@ domfields={
 'TRACER_CCQ':['tracer squared qt',u'-'],
 'TRACER_CH':['tracer MSE temperature',u'K'],
 'TRACER_CCH':['tracer squared MSE temperature',u'K'],
+'TRACER_CTVORT':['tracer total vorticity',u's-1'],
+'TRACER_CCTVORT':['tracer squared total vorticity',u's-1'],
+'TRACER_CQCRITERION':['tracer Q criterion',u's-2'],
+'TRACER_CCQCRITERION':['tracer squared Q criterion',u's-2'],
+'TRACER_CDPDZ':['tracer pressure gradient term',u'm s-2'],
+'TRACER_CCDPDZ':['tracer squared pressure gradient term',u'm s-2'],
+'TRACER_CDBUOYPDZ':['tracer buoyancy pressure gradient term',u'm s-2'],
+'TRACER_CCDBUOYPDZ':['tracer squared buoyancy pressure gradient term',u'm s-2'],
 }
 
 # variables with vertical dependence only
@@ -161,5 +176,13 @@ vertfields={
 'TRACERPROF_CCQ':['tracer squared qt',u'-'],
 'TRACERPROF_CH':['tracer MSE temperature',u'K'],
 'TRACERPROF_CCH':['tracer squared MSE temperature',u'K'],
+'TRACERPROF_CTVORT':['tracer total vorticity',u's-1'],
+'TRACERPROF_CCTVORT':['tracer squared total vorticity',u's-1'],
+'TRACERPROF_CQCRITERION':['tracer Q criterion',u's-2'],
+'TRACERPROF_CCQCRITERION':['tracer squared Q criterion',u's-2'],
+'TRACERPROF_CDPDZ':['tracer pressure gradient term',u'm s-2'],
+'TRACERPROF_CCDPDZ':['tracer squared pressure gradient term',u'm s-2'],
+'TRACERPROF_CDBUOYPDZ':['tracer buoyancy pressure gradient term',u'm s-2'],
+'TRACERPROF_CCDBUOYPDZ':['tracer squared buoyancy pressure gradient term',u'm s-2'],
 }
 

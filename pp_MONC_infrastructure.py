@@ -51,9 +51,7 @@ psatarr=zeros(350,double) # saturation pressure values denominator array
 psatarrabc=zeros((3,350),double) # saturation pressure spline array
 
 for i in range(350):
-    numpsatarr[i]=qsa1/(0.01*exp(qsa2*(i-tk0c)/(i-qsa3)))  
-    denpsatarr[i]=qsa4/(0.01*exp(qsa2*(i-tk0c)/(i-qsa3)))
-    psatarr[i]=0.01*exp(qsa2*(i-tk0c)/(i-qsa3))
+   psatarr[i]=0.01*exp(qsa2*(i-tk0c)/(i-qsa3))
 
 psatspline = splrep(range(150,350),psatarr[150:350], k=2)
 splinecoeffs=spalde(range(150,350),psatspline)
@@ -194,6 +192,10 @@ def ye_to_yc(field):
     fieldyc=0.5*(field[:,:,:]+hstack((field[:,:-1,:],field[:,-1,:][:,None,:])))
     return fieldyc
 
+def ze_to_zc(field):
+    fieldzc=dstack((field[:,:,0]-0.5*(field[:,:,1]-field[:,:,0]),0.5*(field[:,:,:-1]+field[:,:,1:])))
+    return fieldzc
+
 def interpolate_xe(field):
     fieldxe=0.5*(field[:,:,:]+vstack((field[-1,:,:][None,:,:],field[:-1,:,:])))
     return fieldxe
@@ -203,11 +205,11 @@ def interpolate_ye(field):
     return fieldye
 
 def interpolate_ze(field):
-    fieldze=dstack((0.5*(field[:,:,:-1]+field[:,:,1:]),field[:,:,-1]+(field[:,:,-1]-field[:,:,-2])))
+    fieldze=dstack((0.5*(field[:,:,:-1]+field[:,:,1:]),field[:,:,-1]+0.5*(field[:,:,-1]-field[:,:,-2])))
     return fieldze
 
 def interpolate_ze_1d(array):
-    arrayze=hstack((0.5*(array[:-1]+array[1:]),[array[-1]+(array[-1]-array[-2])]))
+    arrayze=hstack((0.5*(array[:-1]+array[1:]),[array[-1]+0.5*(array[-1]-array[-2])]))
     return arrayze
 
 def cropped(array):
@@ -310,7 +312,7 @@ def fastmoistphysics(tlisein,qtin,z,p,force=0):
     int niter;
     bool lunsat;
     double zt, ztold, zttry, zqt, ztlise, zz, zp;
-    double znumpint, zdenpint, zpsat, zqsat;
+    double zpsat, zqsat;
     double zqc, ztv;
     double ztliseguess,ztliseguesstry;
     int ztint;
@@ -324,22 +326,16 @@ def fastmoistphysics(tlisein,qtin,z,p,force=0):
       zp=p(k);
       
       // start loop
-      lunsat=true;
+      lunsat=false;
             
       //first temperature guess: dry parcel
       zt=ztlise-(grav*invcp)*zz;
       ztint=std::min(int(zt),349);
-      znumpint=numpsatarr(ztint);
-      zdenpint=denpsatarr(ztint);
-      
-      if(zqt*(zp-zdenpint)>znumpint) {
-        lunsat=false; // definitely unsaturated
-      }
-      if(lunsat==false) {
-        zpsat=psatarrabc(0,ztint)+(zt-ztint)*psatarrabc(1,ztint)+0.5*(zt-ztint)*(zt-ztint)*psatarrabc(2,ztint);
-        if(not(zqt*(zp*zpsat-qsa4)>qsa1)) {
-          lunsat=true; // definitely unsaturated
-        }        
+
+      zpsat=psatarrabc(0,ztint)+(zt-ztint)*psatarrabc(1,ztint)+0.5*(zt-ztint)*(zt-ztint)*psatarrabc(2,ztint);
+
+      if(not(zqt*(zp*zpsat-qsa4)>qsa1)) {
+        lunsat=true; // definitely unsaturated
       }
      
       // the long saturation loop is needed: jaiks
@@ -409,7 +405,7 @@ def fastmoistphysics(tlisein,qtin,z,p,force=0):
     }
     }
     """
-    weave.inline(code, ['tlisein','qtin','p','z','tv','qc','numpsatarr','denpsatarr','psatarrabc'],type_converters = converters.blitz,support_code=support,compiler='gcc',force=force)
+    weave.inline(code, ['tlisein','qtin','p','z','tv','qc','psatarrabc'],type_converters = converters.blitz,support_code=support,compiler='gcc',force=force)
     return tv,qc
     
 ## CLASSES
@@ -570,7 +566,7 @@ class ncobject(object,get_variable_class):
         if self.active:
             self.data=data      
             self.outfile=Dataset(self.ncoutname,'a',format='NETCDF4',zlib=outputconfig.lzlib)
-    def opener2(self,datai,step):
+    def opener2(self,data,step):
         self.step=step
         if self.active:
             self.t=0
@@ -910,16 +906,25 @@ class dataorganizer(get_variable_class):
             qv=self.gv('q_vapour')
             q3=self.gv('q_qfield_3')
             maxq3=nanmax(q3)
-            tlise=t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qv-(rlsub/cp)*qi
+            tlise=t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qc-(rlsub/cp)*qi
             qt=qc+qv+qi
+            #print 'mean_2d(tlise)'
+            #print mean_2d(tlise)
+            #print 'mean_2d(qt)'
+            #print mean_2d(qt)
             tv=t*(1+(rvord-1)*qv-qc-qi)
-            del qv,qc,qi,t
             meantv=mean_2d(tv)
             dtv=tv-meantv[None,None,:]
             #tvcheck,qccheck=fastmoistphysics(tlise,qt,self.helper.zc,pref)
             #cldcheck=(qccheck>0.0)
+            #print 'nanmax(qc)'
+            #print nanmax(qc)
+            #print 'nanmax(qccheck)'
+            #print nanmax(qccheck)
             #dtvcheck=tvcheck-mean_2d(tv)
+            #print 'mean_2d(dtvcheck)'
             #print mean_2d(dtvcheck)
+            del qv,qc,qi,t
             cldcheck=self.helper.cld
             self.masks['cld'].setfield(cldcheck)
             self.masks['cldupd'].setfield(cldcheck*(self.helper.wzc>0.0))
@@ -1100,14 +1105,40 @@ class dataorganizer(get_variable_class):
     def integrate_rho_zc(self,field):
         return sum(field[:,:,1:]*((self.helper.zc[1:]-self.helper.ze[0:-1])*self.helper.rhon[1:])[None,None,:],axis=2,dtype=numpy.float64)      
     def hvort(self,u,v):
-        dvdx=(vstack((v[-1,:,:][None,:,:],v[:-1,:,:]))-v[:,:,:])/(self.helper.xe[1]-self.helper.xe[0])
-        dudy=(hstack((u[:,-1,:][:,None,:],u[:,:-1,:]))-u[:,:,:])/(self.helper.ye[1]-self.helper.ye[0])
+        dvdx=(v[:,:,:]-vstack((v[-1,:,:][None,:,:],v[:-1,:,:])))/(self.helper.xe[1]-self.helper.xe[0])
+        dudy=(u[:,:,:]-hstack((u[:,-1,:][:,None,:],u[:,:-1,:])))/(self.helper.ye[1]-self.helper.ye[0])
         return dvdx-dudy                            
     def vvort(self,u,v,w):
-        dwdx=(vstack((w[-1,:,:][None,:,:],w[:-1,:,:]))-vstack((w[1:,:,:],w[0,:,:][None,:,:])))/(self.helper.xe[2]-self.helper.xe[0])
-        dwdy=(hstack((w[:,-1,:][:,None,:],w[:,:-1,:]))-hstack((w[:,1:,:],w[:,0,:][:,None,:])))/(self.helper.ye[2]-self.helper.ye[0])
+        dwdx=(w[:,:,:]-vstack((w[-1,:,:][None,:,:],w[:-1,:,:])))/(self.helper.xe[1]-self.helper.xe[0])
+        dwdy=(w[:,:,:]-hstack((w[:,-1,:][:,None,:],w[:,:-1,:])))/(self.helper.ye[1]-self.helper.ye[0])
         dvdz=dstack(((v[:,:,1:]-v[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0:-1])[None,None,:],0.0*v[:,:,-1]))
         dudz=dstack(((u[:,:,1:]-u[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0:-1])[None,None,:],0.0*u[:,:,-1]))
-        vvort=sqrt((dwdy-ye_to_yc(dvdz))**2+(dudz-xe_to_xc(dwdx))**2)
+        vvort=sqrt(ye_to_yc((dwdy-dvdz)**2)+xe_to_xc((dudz-dwdx)**2))
         vvort[:,:,0]=0.0                            
-        return vvort                            
+        return vvort
+    def getooss(self,u,v,w):
+        dvdx=(v[:,:,:]-vstack((v[-1,:,:][None,:,:],v[:-1,:,:])))/(self.helper.xe[1]-self.helper.xe[0])
+        dudy=(u[:,:,:]-hstack((u[:,-1,:][:,None,:],u[:,:-1,:])))/(self.helper.ye[1]-self.helper.ye[0])
+        oo1=0.5*(dvdx-dudy)
+        ss1=0.5*(dvdx+dudy)
+        del dvdx,dudy
+        dwdy=(w[:,:,:]-hstack((w[:,-1,:][:,None,:],w[:,:-1,:])))/(self.helper.ye[1]-self.helper.ye[0])
+        dvdz=dstack(((v[:,:,1:]-v[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0:-1])[None,None,:],0.0*v[:,:,-1]))
+        oo2=(dwdy-dvdz)
+        ss2=(dwdy+dvdz)
+        oo2[:,:,0]=0.0                            
+        ss2[:,:,0]=0.0
+        del dwdy,dvdz                             
+        dwdx=(w[:,:,:]-vstack((w[-1,:,:][None,:,:],w[:-1,:,:])))/(self.helper.xe[1]-self.helper.xe[0])
+        dudz=dstack(((u[:,:,1:]-u[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0:-1])[None,None,:],0.0*u[:,:,-1]))
+        oo3=0.5*(dudz-dwdx)
+        ss3=0.5*(dudz+dwdx)
+        oo3[:,:,0]=0.0                            
+        ss3[:,:,0]=0.0 
+        del dwdx,dudz 
+        dudx=(u[:,:,:]-vstack((u[-1,:,:][None,:,:],u[:-1,:,:])))/(self.helper.xe[1]-self.helper.xe[0])
+        dvdy=(v[:,:,:]-hstack((v[:,-1,:][:,None,:],v[:,:-1,:])))/(self.helper.ye[1]-self.helper.ye[0])
+        dwdz=dstack((0.0*w[:,:,0],(w[:,:,1:]-w[:,:,:-1])/(self.helper.zc[1:]-self.helper.zc[0:-1])[None,None,:])) 
+        oo=2.0*(ye_to_yc(xe_to_xc(oo1**2))+ze_to_zc(ye_to_yc(oo2**2))+ze_to_zc(xe_to_xc(oo3**2)))
+        ss=2.0*(ye_to_yc(xe_to_xc(ss1**2))+ze_to_zc(ye_to_yc(ss2**2))+ze_to_zc(xe_to_xc(ss3**2))+dudx*dudx+dvdy*dvdy+dwdz*dwdz)                                          
+        return oo,ss
