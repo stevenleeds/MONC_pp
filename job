@@ -1,0 +1,15 @@
+#!/bin/bash --login
+#PBS -N MONC_pp
+#PBS -l walltime=01:00:00 
+#PBS -j oe
+#PBS -P udmonc
+#PBS -q normal
+
+module load python/v2.7.9
+
+cd /projects/udmonc/anbar/MONC_pp_z
+
+aprun -n 1 -d 24 python pp_multiplex.py -c 25m_res_projects.cfg -s 25mrun.syscfg dummy 25 $number \
+                 --overwrite \
+                 > my_pyout_$PBS_ARRAY_INDEX.$number.txt \
+                 2> my_pyerr_$PBS_ARRAY_INDEX.$number.txt
