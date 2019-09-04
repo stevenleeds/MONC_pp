@@ -539,7 +539,7 @@ class nchelper(object,get_variable_class):
         self.svlist=[]        
     def update(self,data,step):
         self.data=data
-	self.step=step
+        self.step=step
         self.varkeys=self.data.variables.keys()
         w=self.gv('w')
         whalf=0.5*(w[:,:,1:]+w[:,:,:-1])
@@ -936,8 +936,7 @@ class dataorganizer(get_variable_class):
         self.spec_x=statgroupspectra_x('spec_x.'+sysconfig.exper+'.%03d.nc'%sysconfig.filenumber,'MONC spectra along the x-direction')
         self.spec_y=statgroupspectra_y('spec_y.'+sysconfig.exper+'.%03d.nc'%sysconfig.filenumber,'MONC spectra along the y-direction')
         if outputconfig.lsamp:
-            #bl_sh,bl_cc,bl_env etc
- 	    self.init_masks(['tl_env'])
+            self.init_masks(['tr','tr_cc'])
         self.force=1
     def calc_masks(self):
         if outputconfig.lsamp:
@@ -959,45 +958,23 @@ class dataorganizer(get_variable_class):
             meantv=mean_2d(tv)
             dtv=tv-meantv[None,None,:]
             del qv,qi,t
-            cldcheck=self.helper.cld
-            
-	    ##ANNE	    
-	    q_purity = self.gv('q_purity_tracer')
+            cldcheck=self.helper.cld    
+            q_purity = self.gv('q_purity_tracer')
 
-	    # Need to define masks for each quadrant - let's do top right first
-	    a = np.zeros((160, 160, 161)) #does it go x, y, z? - yes
-	    nx, ny, nz = np.shape(a)
-	    # Assign values to a
-	    #a[nx/2:nx, ny/2:ny, :] = 1 #top right
-	    a[0:nx/2, ny/2:ny, :] = 1 #top left
-	    #a[nx/2:nx, 0:ny/2, :] = 1 #bottom right
-	    #a[0:nx/2, 0:ny/2, :] = 1 #bottom left
+            # Define masks for each quadrant
+            a = np.zeros((160, 160, 161))
+            nx, ny, nz = np.shape(a)
 
-	    # Environment
-	    #self.masks['tr_env'].setfield(np.logical_and(a > 0.5, q_purity <= 1.0E-3))
-	    self.masks['tl_env'].setfield(np.logical_and(a > 0.5, q_purity <= 1.0E-3))
-	    #self.masks['br_env'].setfield(np.logical_and(a > 0.5, q_purity <= 1.0E-3))
-	    #self.masks['bl_env'].setfield(np.logical_and(a > 0.5, q_purity <= 1.0E-3))
+            # Assign values to a
+            a[nx/2:nx, ny/2:ny, :] = 1 #top right
+            self.masks['tr'].setfield(a > 0.5)
 
             # Cloud Core
-	    #attempt_1 = np.logical_and(a > 0.5, q_purity > 1.0E-3)
-	    #attempt_2 = np.logical_and(qc > 1.0E-5, w > 0.5)
- 	    #self.masks['tr_cc'].setfield(np.logical_and(attempt_1, attempt_2))			
-	    #self.masks['tl_cc'].setfield(np.logical_and(attempt_1, attempt_2))	
-            #self.masks['br_cc'].setfield(np.logical_and(attempt_1, attempt_2))	
-	    #self.masks['bl_cc'].setfield(np.logical_and(attempt_1, attempt_2))	
+            attempt_1 = np.logical_and(a > 0.5, q_purity > 1.0E-3)
+            attempt_2 = np.logical_and(qc > 1.0E-5, w > 0.5)
+            self.masks['tr_cc'].setfield(np.logical_and(attempt_1, attempt_2))  
 
-            # Shell
-	    #attempt_1 = np.logical_and(a > 0.5, q_purity > 1.0E-3)
-	    #attempt_2 = np.logical_or(w <= 0.5, qc <=1.0E-5) #OR, not AND
-	    #self.masks['tr_sh'].setfield(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['tl_sh'].setfield(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['br_sh'].setfield(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['bl_sh'].setfield(np.logical_and(attempt_1, attempt_2)) # this is a mask of true/false or 1/0?
-
-	    ##ANNE
-   
-            del dtv,cldcheck#, attempt_1, attempt_2
+            del dtv,cldcheck, attempt_1, attempt_2
 
             # PHYSICS AT XE
             wxe=interpolate_xe(self.helper.wzc)
@@ -1008,35 +985,14 @@ class dataorganizer(get_variable_class):
             del qtxe,tlisexe
             dtvxe=tvxe-meantv
             cldxe=(qcxe>1.0e-6)
-
-            #ANNE	    
-	    q_purityxe = interpolate_xe(q_purity)
-	    #qcxe = interpolate_xe(qc)
-	    ##ANNE     
-	    # Environment
-	    #self.masks['tr_env'].setfieldxe(np.logical_and(a > 0.5, q_purityxe <= 1.0E-3))
-	    self.masks['tl_env'].setfieldxe(np.logical_and(a > 0.5, q_purityxe <= 1.0E-3))
-	    #self.masks['br_env'].setfieldxe(np.logical_and(a > 0.5, q_purityxe <= 1.0E-3))
-	    #self.masks['bl_env'].setfieldxe(np.logical_and(a > 0.5, q_purityxe <= 1.0E-3))
+            q_purityxe = interpolate_xe(q_purity)
 
             # Cloud Core
-	    #attempt_1 = np.logical_and(a > 0.5, q_purityxe > 1.0E-3)
-	    #attempt_2 = np.logical_and(qcxe > 1.0E-5, wxe > 0.5)
- 	    #self.masks['tr_cc'].setfieldxe(np.logical_and(attempt_1, attempt_2))
-            #self.masks['tl_cc'].setfieldxe(np.logical_and(attempt_1, attempt_2))
-            #self.masks['br_cc'].setfieldxe(np.logical_and(attempt_1, attempt_2))
-            #self.masks['bl_cc'].setfieldxe(np.logical_and(attempt_1, attempt_2))
-
-            # Shell
-	    #attempt_1 = np.logical_and(a > 0.5, q_purityxe > 1.0E-3)
-	    #attempt_2 = np.logical_or(wxe <= 0.5, qcxe <=1.0E-5)
-	    #self.masks['tr_sh'].setfieldxe(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['tl_sh'].setfieldxe(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['br_sh'].setfieldxe(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['bl_sh'].setfieldxe(np.logical_and(attempt_1, attempt_2))
-	    
-	    ##ANNE
-            del cldxe,wxe,tvxe,dtvxe,q_purityxe,qcxe#,attempt_1,attempt_2
+            attempt_1 = np.logical_and(a > 0.5, q_purityxe > 1.0E-3)
+            attempt_2 = np.logical_and(qcxe > 1.0E-5, wxe > 0.5)
+            self.masks['tr_cc'].setfieldxe(np.logical_and(attempt_1, attempt_2))
+ 
+            del cldxe,wxe,tvxe,dtvxe,q_purityxe,qcxe,attempt_1,attempt_2
 
             # PHYSICS AT YE        
             wye=interpolate_ye(self.helper.wzc)
@@ -1046,38 +1002,17 @@ class dataorganizer(get_variable_class):
             del qtye,tliseye
             dtvye=tvye-meantv
             cldye=(qcye>1.0e-6)
-
-            #ANNE	    
-	    q_purityye = interpolate_ye(q_purity)
-	
-	    # Environment
-	    #self.masks['tr_env'].setfieldye(np.logical_and(a > 0.5, q_purityye <= 1.0E-3))
-	    self.masks['tl_env'].setfieldye(np.logical_and(a > 0.5, q_purityye <= 1.0E-3))
-	    #self.masks['br_env'].setfieldye(np.logical_and(a > 0.5, q_purityye <= 1.0E-3))
-	    #self.masks['bl_env'].setfieldye(np.logical_and(a > 0.5, q_purityye <= 1.0E-3))
-
+            q_purityye = interpolate_ye(q_purity)
+    
             # Cloud Core
-	    #attempt_1 = np.logical_and(a > 0.5, q_purityye > 1.0E-3)
-	    #attempt_2 = np.logical_and(qcye > 1.0E-5, wye > 0.5)
- 	    #self.masks['tr_cc'].setfieldye(np.logical_and(attempt_1, attempt_2))
-            #self.masks['tl_cc'].setfieldye(np.logical_and(attempt_1, attempt_2))
-            #self.masks['br_cc'].setfieldye(np.logical_and(attempt_1, attempt_2))
-            #self.masks['bl_cc'].setfieldye(np.logical_and(attempt_1, attempt_2))
+            attempt_1 = np.logical_and(a > 0.5, q_purityye > 1.0E-3)
+            attempt_2 = np.logical_and(qcye > 1.0E-5, wye > 0.5)
+            self.masks['tr_cc'].setfieldye(np.logical_and(attempt_1, attempt_2))
 
-            # Shell
-	    #attempt_1 = np.logical_and(a > 0.5, q_purityye > 1.0E-3) #bear in mind, this is including the boundary layer here
-	    #attempt_2 = np.logical_or(wye <= 0.5, qcye <=1.0E-5)
-	    #self.masks['tr_sh'].setfieldye(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['tl_sh'].setfieldye(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['br_sh'].setfieldye(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['bl_sh'].setfieldye(np.logical_and(attempt_1, attempt_2))
-
-	    ##ANNE 
-            del cldye,wye,tvye,dtvye,q_purityye,qcye#,attempt_1,attempt_2
+            del cldye,wye,tvye,dtvye,q_purityye,qcye,attempt_1,attempt_2
 
             # PHYSICS AT ZE, TAKE INTO ACCOUNT SURFACE
             w=self.gv('w')
-            #q3ze=interpolate_ze(q3)
             qtze=interpolate_ze(qt)
             tliseze=interpolate_ze(tlise)
             prefze=interpolate_ze_1d(pref)
@@ -1085,36 +1020,15 @@ class dataorganizer(get_variable_class):
             del qtze,tliseze
             dtvze=deviation_2d(tvze)
             cldze=(qcze>1.0e-6)
-
- 	    ##ANNE  	    
-	    q_purityze = interpolate_ze(q_purity)
-
-	    # Environment
-	    #self.masks['tr_env'].setfieldze(np.logical_and(a > 0.5, q_purityze <= 1.0E-3))
-	    self.masks['tl_env'].setfieldze(np.logical_and(a > 0.5, q_purityze <= 1.0E-3))
-	    #self.masks['br_env'].setfieldze(np.logical_and(a > 0.5, q_purityze <= 1.0E-3))
-	    #self.masks['bl_env'].setfieldze(np.logical_and(a > 0.5, q_purityze <= 1.0E-3))
+            q_purityze = interpolate_ze(q_purity)
 
             # Cloud Core
-	    #attempt_1 = np.logical_and(a > 0.5, q_purityze > 1.0E-3)
-	    #attempt_2 = np.logical_and(qcze > 1.0E-5, w > 0.5)
- 	    #self.masks['tr_cc'].setfieldze(np.logical_and(attempt_1, attempt_2))
-            #self.masks['tl_cc'].setfieldze(np.logical_and(attempt_1, attempt_2))
-            #self.masks['br_cc'].setfieldze(np.logical_and(attempt_1, attempt_2))
-            #self.masks['bl_cc'].setfieldze(np.logical_and(attempt_1, attempt_2))
+            attempt_1 = np.logical_and(a > 0.5, q_purityze > 1.0E-3)
+            attempt_2 = np.logical_and(qcze > 1.0E-5, w > 0.5)
+            self.masks['tr_cc'].setfieldze(np.logical_and(attempt_1, attempt_2))
 
-            # Shell
-	    #attempt_1 = np.logical_and(a > 0.5, q_purityze > 1.0E-3)
-	    #attempt_2 = np.logical_or(w <= 0.5, qcze <=1.0E-5)
-	    #self.masks['tr_sh'].setfieldze(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['tl_sh'].setfieldze(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['br_sh'].setfieldze(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['bl_sh'].setfieldze(np.logical_and(attempt_1, attempt_2))
-
-	    ##ANNE 
-
-            del cldze,w,tvze,dtvze,q_purityze,qcze#,attempt_1,attempt_2
-	    del deltheta
+            del cldze,w,tvze,dtvze,q_purityze,qcze,attempt_1,attempt_2
+            del deltheta
 
     def init_masks(self,masks):
         self.masks={}
@@ -1124,7 +1038,7 @@ class dataorganizer(get_variable_class):
         self.data=data
         self.helper=helper
         self.varkeys=self.data.variables.keys()
-  	nsteps=len(self.data.variables['time_series_600'])
+        nsteps=len(self.data.variables['time_series_600'])
         # opening and closing enables us to check the data already while it is being processed
         self.stat_1d.opener(data)
         self.samp_1d.opener(data)
@@ -1137,8 +1051,8 @@ class dataorganizer(get_variable_class):
         self.stat_dom.opener(data)
         self.spec_x.opener(data)
         self.spec_y.opener(data)
-	for step in range(nsteps):
-	    self.step=step
+        for step in range(nsteps):
+            self.step=step
             helper.update(data,step)
             self.stat_1d.opener2(data,step)
             self.samp_1d.opener2(data,step)
@@ -1151,8 +1065,8 @@ class dataorganizer(get_variable_class):
             self.stat_dom.opener2(data,step)
             self.spec_x.opener2(data,step)
             self.spec_y.opener2(data,step)
-	    self.calc_masks()
-	    timestep=self.data.variables['time_series_600'][self.step]
+            self.calc_masks()
+            timestep=self.data.variables['time_series_600'][self.step]
             self.clouds=statgroupclouds("clouds/clouds."+sysconfig.exper+".%05d.%03d.nc"%(timestep,sysconfig.filenumber),'3d in-cloud variable fields at %05d seconds' %timestep)
             self.clouds.opener(data)
             self.clouds.opener2(data,step)
