@@ -104,6 +104,7 @@ derivedfields={
 'RADIO2':['radioactive tracer 2 concentration',u'-'],
 'BUOY':['thetav perturbation from mean state',u'-'],
 'THPERT':['theta perturbation',u'K'],
+'THV':['virtual potential temperature',u'K'],
 'TRAC2':['mean (tracer^2)',u'-'],
 'OO':['vorticity tensor magnitude',u's-2'],
 'SS':['rate of strain tensor magnitude',u's-2'],

@@ -937,7 +937,7 @@ class dataorganizer(get_variable_class):
         self.spec_y=statgroupspectra_y('spec_y.'+sysconfig.exper+'.%03d.nc'%sysconfig.filenumber,'MONC spectra along the y-direction')
         if outputconfig.lsamp:
             #bl_sh,bl_cc,bl_env etc
- 	    self.init_masks(['tl_env'])
+ 	    self.init_masks(['br_sh'])
         self.force=1
     def calc_masks(self):
         if outputconfig.lsamp:
@@ -969,13 +969,13 @@ class dataorganizer(get_variable_class):
 	    nx, ny, nz = np.shape(a)
 	    # Assign values to a
 	    #a[nx/2:nx, ny/2:ny, :] = 1 #top right
-	    a[0:nx/2, ny/2:ny, :] = 1 #top left
-	    #a[nx/2:nx, 0:ny/2, :] = 1 #bottom right
+	    #a[0:nx/2, ny/2:ny, :] = 1 #top left
+	    a[nx/2:nx, 0:ny/2, :] = 1 #bottom right
 	    #a[0:nx/2, 0:ny/2, :] = 1 #bottom left
 
 	    # Environment
 	    #self.masks['tr_env'].setfield(np.logical_and(a > 0.5, q_purity <= 1.0E-3))
-	    self.masks['tl_env'].setfield(np.logical_and(a > 0.5, q_purity <= 1.0E-3))
+	    #self.masks['tl_env'].setfield(np.logical_and(a > 0.5, q_purity <= 1.0E-3))
 	    #self.masks['br_env'].setfield(np.logical_and(a > 0.5, q_purity <= 1.0E-3))
 	    #self.masks['bl_env'].setfield(np.logical_and(a > 0.5, q_purity <= 1.0E-3))
 
@@ -988,16 +988,16 @@ class dataorganizer(get_variable_class):
 	    #self.masks['bl_cc'].setfield(np.logical_and(attempt_1, attempt_2))	
 
             # Shell
-	    #attempt_1 = np.logical_and(a > 0.5, q_purity > 1.0E-3)
-	    #attempt_2 = np.logical_or(w <= 0.5, qc <=1.0E-5) #OR, not AND
+	    attempt_1 = np.logical_and(a > 0.5, q_purity > 1.0E-3)
+	    attempt_2 = np.logical_or(w <= 0.5, qc <=1.0E-5) #OR, not AND
 	    #self.masks['tr_sh'].setfield(np.logical_and(attempt_1, attempt_2))
 	    #self.masks['tl_sh'].setfield(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['br_sh'].setfield(np.logical_and(attempt_1, attempt_2))
+	    self.masks['br_sh'].setfield(np.logical_and(attempt_1, attempt_2))
 	    #self.masks['bl_sh'].setfield(np.logical_and(attempt_1, attempt_2)) # this is a mask of true/false or 1/0?
 
 	    ##ANNE
    
-            del dtv,cldcheck#, attempt_1, attempt_2
+            del dtv,cldcheck, attempt_1, attempt_2
 
             # PHYSICS AT XE
             wxe=interpolate_xe(self.helper.wzc)
@@ -1015,7 +1015,7 @@ class dataorganizer(get_variable_class):
 	    ##ANNE     
 	    # Environment
 	    #self.masks['tr_env'].setfieldxe(np.logical_and(a > 0.5, q_purityxe <= 1.0E-3))
-	    self.masks['tl_env'].setfieldxe(np.logical_and(a > 0.5, q_purityxe <= 1.0E-3))
+	    #self.masks['tl_env'].setfieldxe(np.logical_and(a > 0.5, q_purityxe <= 1.0E-3))
 	    #self.masks['br_env'].setfieldxe(np.logical_and(a > 0.5, q_purityxe <= 1.0E-3))
 	    #self.masks['bl_env'].setfieldxe(np.logical_and(a > 0.5, q_purityxe <= 1.0E-3))
 
@@ -1028,15 +1028,15 @@ class dataorganizer(get_variable_class):
             #self.masks['bl_cc'].setfieldxe(np.logical_and(attempt_1, attempt_2))
 
             # Shell
-	    #attempt_1 = np.logical_and(a > 0.5, q_purityxe > 1.0E-3)
-	    #attempt_2 = np.logical_or(wxe <= 0.5, qcxe <=1.0E-5)
+	    attempt_1 = np.logical_and(a > 0.5, q_purityxe > 1.0E-3)
+	    attempt_2 = np.logical_or(wxe <= 0.5, qcxe <=1.0E-5)
 	    #self.masks['tr_sh'].setfieldxe(np.logical_and(attempt_1, attempt_2))
 	    #self.masks['tl_sh'].setfieldxe(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['br_sh'].setfieldxe(np.logical_and(attempt_1, attempt_2))
+	    self.masks['br_sh'].setfieldxe(np.logical_and(attempt_1, attempt_2))
 	    #self.masks['bl_sh'].setfieldxe(np.logical_and(attempt_1, attempt_2))
 	    
 	    ##ANNE
-            del cldxe,wxe,tvxe,dtvxe,q_purityxe,qcxe#,attempt_1,attempt_2
+            del cldxe,wxe,tvxe,dtvxe,q_purityxe,attempt_1,attempt_2,qcxe
 
             # PHYSICS AT YE        
             wye=interpolate_ye(self.helper.wzc)
@@ -1052,7 +1052,7 @@ class dataorganizer(get_variable_class):
 	
 	    # Environment
 	    #self.masks['tr_env'].setfieldye(np.logical_and(a > 0.5, q_purityye <= 1.0E-3))
-	    self.masks['tl_env'].setfieldye(np.logical_and(a > 0.5, q_purityye <= 1.0E-3))
+	    #self.masks['tl_env'].setfieldye(np.logical_and(a > 0.5, q_purityye <= 1.0E-3))
 	    #self.masks['br_env'].setfieldye(np.logical_and(a > 0.5, q_purityye <= 1.0E-3))
 	    #self.masks['bl_env'].setfieldye(np.logical_and(a > 0.5, q_purityye <= 1.0E-3))
 
@@ -1065,15 +1065,15 @@ class dataorganizer(get_variable_class):
             #self.masks['bl_cc'].setfieldye(np.logical_and(attempt_1, attempt_2))
 
             # Shell
-	    #attempt_1 = np.logical_and(a > 0.5, q_purityye > 1.0E-3) #bear in mind, this is including the boundary layer here
-	    #attempt_2 = np.logical_or(wye <= 0.5, qcye <=1.0E-5)
+	    attempt_1 = np.logical_and(a > 0.5, q_purityye > 1.0E-3) #bear in mind, this is including the boundary layer here
+	    attempt_2 = np.logical_or(wye <= 0.5, qcye <=1.0E-5)
 	    #self.masks['tr_sh'].setfieldye(np.logical_and(attempt_1, attempt_2))
 	    #self.masks['tl_sh'].setfieldye(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['br_sh'].setfieldye(np.logical_and(attempt_1, attempt_2))
+	    self.masks['br_sh'].setfieldye(np.logical_and(attempt_1, attempt_2))
 	    #self.masks['bl_sh'].setfieldye(np.logical_and(attempt_1, attempt_2))
 
 	    ##ANNE 
-            del cldye,wye,tvye,dtvye,q_purityye,qcye#,attempt_1,attempt_2
+            del cldye,wye,tvye,dtvye,q_purityye,attempt_1,attempt_2,qcye
 
             # PHYSICS AT ZE, TAKE INTO ACCOUNT SURFACE
             w=self.gv('w')
@@ -1091,7 +1091,7 @@ class dataorganizer(get_variable_class):
 
 	    # Environment
 	    #self.masks['tr_env'].setfieldze(np.logical_and(a > 0.5, q_purityze <= 1.0E-3))
-	    self.masks['tl_env'].setfieldze(np.logical_and(a > 0.5, q_purityze <= 1.0E-3))
+	    #self.masks['tl_env'].setfieldze(np.logical_and(a > 0.5, q_purityze <= 1.0E-3))
 	    #self.masks['br_env'].setfieldze(np.logical_and(a > 0.5, q_purityze <= 1.0E-3))
 	    #self.masks['bl_env'].setfieldze(np.logical_and(a > 0.5, q_purityze <= 1.0E-3))
 
@@ -1104,16 +1104,16 @@ class dataorganizer(get_variable_class):
             #self.masks['bl_cc'].setfieldze(np.logical_and(attempt_1, attempt_2))
 
             # Shell
-	    #attempt_1 = np.logical_and(a > 0.5, q_purityze > 1.0E-3)
-	    #attempt_2 = np.logical_or(w <= 0.5, qcze <=1.0E-5)
+	    attempt_1 = np.logical_and(a > 0.5, q_purityze > 1.0E-3)
+	    attempt_2 = np.logical_or(w <= 0.5, qcze <=1.0E-5)
 	    #self.masks['tr_sh'].setfieldze(np.logical_and(attempt_1, attempt_2))
 	    #self.masks['tl_sh'].setfieldze(np.logical_and(attempt_1, attempt_2))
-	    #self.masks['br_sh'].setfieldze(np.logical_and(attempt_1, attempt_2))
+	    self.masks['br_sh'].setfieldze(np.logical_and(attempt_1, attempt_2))
 	    #self.masks['bl_sh'].setfieldze(np.logical_and(attempt_1, attempt_2))
 
 	    ##ANNE 
 
-            del cldze,w,tvze,dtvze,q_purityze,qcze#,attempt_1,attempt_2
+            del cldze,w,tvze,dtvze,q_purityze,attempt_1,attempt_2,qcze
 	    del deltheta
 
     def init_masks(self,masks):

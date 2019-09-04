@@ -15,7 +15,7 @@ def replace_words(text, word_dic):
 
 if __name__ == "__main__":
     # read the file
-    for i in range(1):
+    for i in range(30):
         fin = open('job', "r")
         str2 = fin.read()
         fin.close()

@@ -70,34 +70,32 @@ class dataprocessor(dataorganizer):
         buoyp=delp-buoyp
         qv=self.gv('q_vapour')
         qc=self.gv('q_cloud_liquid_mass')
-        #qtracer=self.gv('q_qfield_3') #passive tracer
-        #qtracer=self.gv('q_passive_tracer')
-        #trac2=qtracer*qtracer
-	puritytracer=self.gv('q_purity_tracer')
+	    puritytracer=self.gv('q_purity_tracer')
         purity2=puritytracer*puritytracer
-	radiotracer1=self.gv('q_radio1') #tau 30 mins
-	radiotracer2=self.gv('q_radio2') #tau 5 mins
+    	radiotracer1=self.gv('q_radio1') #tau 30 mins
+    	radiotracer2=self.gv('q_radio2') #tau 5 mins
         qi=0.0*qc
         qci=qc+qi
         pref=self.gref('prefn')
         p=delp+pref[None,None,:]
         exn=(pref/psfr)**(rd/cp)
-        theta=thetaref[None,None,:]+deltheta
+        theta=thetaref[None,None,:]+deltheta 
 	
         del deltheta,delp
         t=theta*exn[None,None,:]
         self.process_var('T',t)    
         self.process_var('W',w)
+    	self.process_var('U',u)
+    	self.process_var('V',v)
         self.process_var('QC',qc)
         self.process_var('QV',qv)
         qt=qci+qv
-        #self.process_var('QT',qt)
-        #self.process_var('TRACER',qtracer)
-        #self.process_var('TRAC2',trac2)
-	self.process_var('PURITY',puritytracer)
+        self.process_var('QT',qt)
+    	self.process_var('PURITY',puritytracer)
         self.process_var('PURITY2',purity2)
-	self.process_var('RADIO1',radiotracer1)
-	self.process_var('RADIO2',radiotracer2)
+    	self.process_var('RADIO1',radiotracer1)
+    	self.process_var('RADIO2',radiotracer2)
+	    print 'shape of theta array is', np.shape(theta)
         self.process_var('THETA',theta)  
 	
         
@@ -120,10 +118,23 @@ class dataprocessor(dataorganizer):
         rhon=self.gref('rhon')       
         rho=self.gref('rho')
         self.ref_var('EXNREF',exn)
-        self.ref_var('RHOREF',rhon)
+        self.ref_var('RHOREF',rhon) #at p levels
         self.ref_var('THETAREF',thetaref)
-        self.ref_var('RHOREFH',rho)
+
+    	## ANNE ##
+          #self.ref_var('RHOREFH',rho) #at w levels - anne
+	    # Make rho into a 3d array
+
+	    rho = np.array(rho)
+
+    	x_array = np.repeat(rho[np.newaxis,:], 160, axis=0)
+	    rho_array = np.repeat(x_array[:,np.newaxis,:], 160, axis=1)
+
+	    print 'shape of rho array is', np.shape(rho_array)
+
+	    self.process_var('RHOREFH', rho_array)
         #thetarhox=theta*(1+(rvord-1)*qv-qci) #################
+	
         del qci 
  
         #rqtracer=rhon[None,None,:]*qtracer
@@ -131,9 +142,11 @@ class dataprocessor(dataorganizer):
         del p,	puritytracer, purity2, radiotracer1, radiotracer2
          
         thetal=theta-(rlvap/(cp*exn))*qc-(rlsub/(cp*exn))*qi
-	thetav=theta*(1+(0.61*qv)-qc) #virtual potential temperature
-	del_thetav=deviation_2d(thetav)
-	self.process_var('BUOY',del_thetav) #including some measure of buoyancy in the cross sections
+	    self.process_var('THETAL', thetal)
+    	thetav=theta*(1+(0.61*qv)-qc) #virtual potential temperature
+	    del_thetav=deviation_2d(thetav)
+    	self.process_var('BUOY',del_thetav) #including some measure of buoyancy in the cross sections
+	    self.process_var('THV', thetav) #theta v
 
         del thetal,thetav
         qsat=qsa1/(0.01*pref[None,None,:]*exp(qsa2*(t-tk0c)/(t-qsa3))-qsa4) 
@@ -177,9 +190,9 @@ class dataprocessor(dataorganizer):
 
 
         #self.int_var('CLDTOP',nanmax(self.helper.cld*(-1e9)+self.helper.zc[None,None,:],axis=2))  
-	self.int_var('CLDBASE',nanmin((1-self.helper.cld)*99999.9+self.helper.cld*self.helper.zc[None,None,:],axis=2))
+	    self.int_var('CLDBASE',nanmin((1-self.helper.cld)*99999.9+self.helper.cld*self.helper.zc[None,None,:],axis=2))
         #self.int_var('CLDBASE',nanmin((1-self.helper.cld)*(-1e9)+self.helper.cld*self.helper.zc[None,None,:],axis=2))
-	self.int_var('THV_MAXCLD',nanmax(self.helper.cld*del_thetav,axis=2)) #finding maximum perturbation of virtual potential temperature from the horizontal mean inside cloud
+	    self.int_var('THV_MAXCLD',nanmax(self.helper.cld*del_thetav,axis=2)) #finding maximum perturbation of virtual potential temperature from the horizontal mean inside cloud
 
 #############################################################################################
         del qv,qc,qi,qt,del_thetav

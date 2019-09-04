@@ -24,7 +24,8 @@ nqh=-1 # q number corresponding to hail
    
 ##  MONC CONSTANTS FOR DERIVED VARIABLES
 
-psfr=1.0e5 # reference pressure
+psfr=1.0e5 # reference pressure in Pascals - original code
+#psfr=98140 # reference pressure in Pascals - modified for Anne?
 rd=287.05 # gas constant, dry air
 rvord=1.608 # ratio of gas constants (water vapor/dry air)
 cp=1005.0 # heat capacity of air at constant pressure
