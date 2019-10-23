@@ -290,7 +290,7 @@ def process_onefile(processor):
 # and copy to project (storage) directory
 def copy_files_to_project():
     scratchfiles=glob.glob(sysconfig.scratchdir+'*'+sysconfig.exper+'.%03d.nc'%sysconfig.filenumber)
-    scratchfilescloud=glob.glob(sysconfig.scratchdir+'clouds/clouds.*'+sysconfig.exper+'.%03d.nc'%sysconfig.filenumber)
+    scratchfilescloud=glob.glob(sysconfig.scratchdir+'pdfdata/pdfdata.*.%03d.nc'%sysconfig.filenumber)
     for scratchfile in scratchfiles+scratchfilescloud:
         print 'revising '+scratchfile
         print 'cpu time is '+str(time.clock()-start)
@@ -302,7 +302,7 @@ def copy_files_to_project():
                 whereinf=isinf(vardata);
                 vardata[whereinf]=nan
         scratchfiledata.close()
-    for scratchfile in scratchfiles:
+    for scratchfile in scratchfiles+scratchfilescloud:
         print 'copying scratch file '+scratchfile+' to '+sysconfig.projectdir
         print 'cpu time is '+str(time.clock()-start)
         shutil.copy(scratchfile,sysconfig.projectdir)
@@ -904,16 +904,16 @@ class statgroupclouds(statgroup_reduced):
     def init_hdims(self):
         self.init_xdims()
         self.init_ydims()
-    def make_var(self,var):
-        self.init_varwithdims(var,['z','y','x'])
+    def make_var(self,var,mask=None):
+        self.init_varwithdims(var,['z','y','x'],mask)
     def init_var(self,var,longname,units,dims):
-        if var in ['QV','QC','QR','QS','QG','QI']:
-            so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib,least_significant_digit=6)
+        if any(text in var for text in ['QV','QC','QR','QS','QG','QI']):
+            so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib,least_significant_digit=8)
             so.missing_value = nan
             so.long_name=longname
             so.units=units
         else:
-            so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib,least_significant_digit=3)
+            so=self.outfile.createVariable(var, 'f4', dims,zlib=outputconfig.lzlib,least_significant_digit=5)
             so.missing_value = nan
             so.long_name=longname
             so.units=units
@@ -936,7 +936,7 @@ class dataorganizer(get_variable_class):
         self.spec_x=statgroupspectra_x('spec_x.'+sysconfig.exper+'.%03d.nc'%sysconfig.filenumber,'MONC spectra along the x-direction')
         self.spec_y=statgroupspectra_y('spec_y.'+sysconfig.exper+'.%03d.nc'%sysconfig.filenumber,'MONC spectra along the y-direction')
         if outputconfig.lsamp:
-            self.init_masks(['tr','tr_cc'])
+            self.init_masks(['tr_mean','tr_cc','tr_sh','tr_env','br_mean','br_cc','br_sh','br_env','bl_mean','bl_cc','bl_sh','bl_env','tl_mean','tl_cc','tl_sh','tl_env',])
         self.force=1
     def calc_masks(self):
         if outputconfig.lsamp:
@@ -956,79 +956,133 @@ class dataorganizer(get_variable_class):
             qt=qc+qv+qi
             tv=t*(1+(rvord-1)*qv-qc-qi)
             meantv=mean_2d(tv)
-            dtv=tv-meantv[None,None,:]
-            del qv,qi,t
-            cldcheck=self.helper.cld    
-            q_purity = self.gv('q_purity_tracer')
+            
+            del qv,qi,t,deltheta
+              
+            quadrants = ['tr','tl','bl','br']
+            segments = ['mean','cc','sh','env']
 
-            # Define masks for each quadrant
-            a = np.zeros((160, 160, 161))
-            nx, ny, nz = np.shape(a)
+            for q in quadrants:
+                # Define masks for each quadrant
+                a = np.zeros((160, 160, 161))
+                nx, ny, nz = np.shape(a)
 
-            # Assign values to a
-            a[nx/2:nx, ny/2:ny, :] = 1 #top right
-            self.masks['tr'].setfield(a > 0.5)
+                # Assign values to a
+                if q == 'tr':
+                    a[nx/2:nx, ny/2:ny, :] = 1
+                elif q == 'tl':
+                    a[0:nx/2, ny/2:ny, :] = 1
+                elif q == 'bl':
+                    a[0:nx/2, 0:ny/2, :] = 1
+                elif q == 'br': 
+                    a[nx/2:nx, 0:ny/2, :] = 1
+                
+                for s in segments:
+                    dtv=tv-meantv[None,None,:]
+                    cldcheck=self.helper.cld  
+                    q_purity = self.gv('q_purity_tracer')
 
-            # Cloud Core
-            attempt_1 = np.logical_and(a > 0.5, q_purity > 1.0E-3)
-            attempt_2 = np.logical_and(qc > 1.0E-5, w > 0.5)
-            self.masks['tr_cc'].setfield(np.logical_and(attempt_1, attempt_2))  
+                    # Physics at xe
+                    wxe=interpolate_xe(self.helper.wzc)
+                    tlisexe=interpolate_xe(tlise)
+                    qtxe=interpolate_xe(qt)
+                    tvxe,qcxe=fastmoistphysics(tlisexe,qtxe,self.helper.zc,pref,force=self.force)
+                    self.force=0
+                    del qtxe,tlisexe
+                    dtvxe=tvxe-meantv
+                    cldxe=(qcxe>1.0e-6)
+                    q_purityxe = interpolate_xe(q_purity)
 
-            del dtv,cldcheck, attempt_1, attempt_2
+                    # Physics at ye
+                    wye=interpolate_ye(self.helper.wzc)
+                    tliseye=interpolate_ye(tlise)
+                    qtye=interpolate_ye(qt)
+                    tvye,qcye=fastmoistphysics(tliseye,qtye,self.helper.zc,pref)
+                    del qtye,tliseye
+                    dtvye=tvye-meantv
+                    cldye=(qcye>1.0e-6)
+                    q_purityye = interpolate_ye(q_purity)
 
-            # PHYSICS AT XE
-            wxe=interpolate_xe(self.helper.wzc)
-            tlisexe=interpolate_xe(tlise)
-            qtxe=interpolate_xe(qt)
-            tvxe,qcxe=fastmoistphysics(tlisexe,qtxe,self.helper.zc,pref,force=self.force)
-            self.force=0
-            del qtxe,tlisexe
-            dtvxe=tvxe-meantv
-            cldxe=(qcxe>1.0e-6)
-            q_purityxe = interpolate_xe(q_purity)
+                    # Physics at ze
+                    w=self.gv('w')
+                    qtze=interpolate_ze(qt)
+                    tliseze=interpolate_ze(tlise)
+                    prefze=interpolate_ze_1d(pref)
+                    tvze,qcze=fastmoistphysics(tliseze,qtze,self.gdimt('z'),prefze)
+                    del qtze,tliseze
+                    dtvze=deviation_2d(tvze)
+                    cldze=(qcze>1.0e-6)
+                    q_purityze = interpolate_ze(q_purity)
 
-            # Cloud Core
-            attempt_1 = np.logical_and(a > 0.5, q_purityxe > 1.0E-3)
-            attempt_2 = np.logical_and(qcxe > 1.0E-5, wxe > 0.5)
-            self.masks['tr_cc'].setfieldxe(np.logical_and(attempt_1, attempt_2))
- 
-            del cldxe,wxe,tvxe,dtvxe,q_purityxe,qcxe,attempt_1,attempt_2
+                    # Mean of quadrant
+                    if s == 'mean':
+                        self.masks[q+'_'+s].setfield(a > 0.5)
+                        # Physics at xe
+                        self.masks[q+'_'+s].setfieldxe(a > 0.5)
+                        # Physics at ye
+                        self.masks[q+'_'+s].setfieldye(a > 0.5)
+                        # Physics at ze
+                        self.masks[q+'_'+s].setfieldze(a > 0.5)
 
-            # PHYSICS AT YE        
-            wye=interpolate_ye(self.helper.wzc)
-            tliseye=interpolate_ye(tlise)
-            qtye=interpolate_ye(qt)
-            tvye,qcye=fastmoistphysics(tliseye,qtye,self.helper.zc,pref)
-            del qtye,tliseye
-            dtvye=tvye-meantv
-            cldye=(qcye>1.0e-6)
-            q_purityye = interpolate_ye(q_purity)
-    
-            # Cloud Core
-            attempt_1 = np.logical_and(a > 0.5, q_purityye > 1.0E-3)
-            attempt_2 = np.logical_and(qcye > 1.0E-5, wye > 0.5)
-            self.masks['tr_cc'].setfieldye(np.logical_and(attempt_1, attempt_2))
+                    # Environment
+                    if s == 'env':
+                        self.masks[q+'_'+s].setfield(np.logical_and(a > 0.5, q_purity <= 1.0E-3))
+                        del q_purity
+                        # Physics at xe
+                        self.masks[q+'_'+s].setfieldxe(np.logical_and(a > 0.5, q_purityxe <= 1.0E-3))
+                        del cldxe,wxe,tvxe,dtvxe,q_purityxe
+                        # Physics at ye
+                        self.masks[q+'_'+s].setfieldye(np.logical_and(a > 0.5, q_purityye <= 1.0E-3))
+                        del cldye,wye,tvye,dtvye,q_purityye
+                        # Physics at ze
+                        self.masks[q+'_'+s].setfieldze(np.logical_and(a > 0.5, q_purityze <= 1.0E-3))
+                        del cldze,tvze,dtvze,q_purityze
 
-            del cldye,wye,tvye,dtvye,q_purityye,qcye,attempt_1,attempt_2
+                    # Cloud Core
+                    elif s == 'cc':
+                        attempt_1 = np.logical_and(a > 0.5, q_purity > 1.0E-3)
+                        attempt_2 = np.logical_and(qc > 1.0E-5, w > 0.5)
+                        self.masks[q+'_'+s].setfield(np.logical_and(attempt_1, attempt_2)) 
+                        del attempt_1,attempt_2
+                        # Physics at xe
+                        attempt_1 = np.logical_and(a > 0.5, q_purityxe > 1.0E-3)
+                        attempt_2 = np.logical_and(qcxe > 1.0E-5, wxe > 0.5)
+                        self.masks[q+'_'+s].setfieldxe(np.logical_and(attempt_1, attempt_2))
+                        del cldxe,wxe,tvxe,dtvxe,q_purityxe,qcxe,attempt_1,attempt_2
+                        # Physics at ye
+                        attempt_1 = np.logical_and(a > 0.5, q_purityye > 1.0E-3)
+                        attempt_2 = np.logical_and(qcye > 1.0E-5, wye > 0.5)
+                        self.masks[q+'_'+s].setfieldye(np.logical_and(attempt_1, attempt_2))
+                        del cldye,wye,tvye,dtvye,q_purityye,qcye,attempt_1,attempt_2
+                        # Physics at ze
+                        attempt_1 = np.logical_and(a > 0.5, q_purityze > 1.0E-3)
+                        attempt_2 = np.logical_and(qcze > 1.0E-5, w > 0.5)
+                        self.masks[q+'_'+s].setfieldze(np.logical_and(attempt_1, attempt_2))
+                        del cldze,tvze,dtvze,q_purityze,qcze,attempt_1,attempt_2,w
+                    
+                    # Shell
+                    elif s == 'sh':
+                        attempt_1 = np.logical_and(a > 0.5, q_purity*(self.helper.zc[None,None,:]>749.0) > 1.0E-3)
+                        attempt_2 = np.logical_or(w <= 0.5, qc <=1.0E-5)
+                        self.masks[q+'_'+s].setfield(np.logical_and(attempt_1, attempt_2))
+                        del attempt_1,attempt_2
+                        # Physics at xe
+                        attempt_1 = np.logical_and(a > 0.5, q_purityxe*(self.helper.zc[None,None,:]>749.0) > 1.0E-3)
+                        attempt_2 = np.logical_or(w <= 0.5, qcxe <=1.0E-5)
+                        self.masks[q+'_'+s].setfieldxe(np.logical_and(attempt_1, attempt_2))
+                        del cldxe,wxe,tvxe,dtvxe,q_purityxe,qcxe,attempt_1,attempt_2
+                        # Physics at ye
+                        attempt_1 = np.logical_and(a > 0.5, q_purityye*(self.helper.zc[None,None,:]>749.0) > 1.0E-3)
+                        attempt_2 = np.logical_or(w <= 0.5, qcye <=1.0E-5)
+                        self.masks[q+'_'+s].setfieldye(np.logical_and(attempt_1, attempt_2))
+                        del cldye,wye,tvye,dtvye,q_purityye,qcye,attempt_1,attempt_2
+                        # Physics at ze
+                        attempt_1 = np.logical_and(a > 0.5, q_purityze*(self.helper.ze[None,None,:]>749.0) > 1.0E-3)
+                        attempt_2 = np.logical_or(w <= 0.5, qcze <=1.0E-5)
+                        self.masks[q+'_'+s].setfieldze(np.logical_and(attempt_1, attempt_2))
+                        del cldze,tvze,dtvze,q_purityze,qcze,attempt_1,attempt_2,w
 
-            # PHYSICS AT ZE, TAKE INTO ACCOUNT SURFACE
-            w=self.gv('w')
-            qtze=interpolate_ze(qt)
-            tliseze=interpolate_ze(tlise)
-            prefze=interpolate_ze_1d(pref)
-            tvze,qcze=fastmoistphysics(tliseze,qtze,self.gdimt('z'),prefze)
-            del qtze,tliseze
-            dtvze=deviation_2d(tvze)
-            cldze=(qcze>1.0e-6)
-            q_purityze = interpolate_ze(q_purity)
-
-            # Cloud Core
-            attempt_1 = np.logical_and(a > 0.5, q_purityze > 1.0E-3)
-            attempt_2 = np.logical_and(qcze > 1.0E-5, w > 0.5)
-            self.masks['tr_cc'].setfieldze(np.logical_and(attempt_1, attempt_2))
-
-            del cldze,w,tvze,dtvze,q_purityze,qcze,attempt_1,attempt_2
-            del deltheta
+            del tv, dtv, qc
 
     def init_masks(self,masks):
         self.masks={}
@@ -1067,10 +1121,11 @@ class dataorganizer(get_variable_class):
             self.spec_y.opener2(data,step)
             self.calc_masks()
             timestep=self.data.variables['time_series_600'][self.step]
-            self.clouds=statgroupclouds("clouds/clouds."+sysconfig.exper+".%05d.%03d.nc"%(timestep,sysconfig.filenumber),'3d in-cloud variable fields at %05d seconds' %timestep)
+            self.clouds=statgroupclouds("pdfdata/pdfdata."+sysconfig.exper+".%05d.%03d.nc"%(timestep,sysconfig.filenumber),'3d in-cloud variable fields at %05d seconds' %timestep)
             self.clouds.opener(data)
             self.clouds.opener2(data,step)
             self.processor()
+            self.clouds.closer()
         self.stat_1d.closer()
         self.samp_1d.closer()
         self.cross_xz.closer()
@@ -1080,7 +1135,6 @@ class dataorganizer(get_variable_class):
         self.stat_yz.closer()
         self.stat_int.closer()
         self.stat_dom.closer()
-        self.clouds.closer()
         self.spec_x.closer()
         self.spec_y.closer()
     def stat_var(self,var,field):
@@ -1098,12 +1152,37 @@ class dataorganizer(get_variable_class):
         if 'makespectra' in allfields[var]:
             self.spec_x.put_make_var(var,field)
             self.spec_y.put_make_var(var,field)
-        if var in progfields:
-            temp=1.0*field #force copy
-            whereinf=(self.helper.cld==0);
-            temp[whereinf] = nan
-            self.clouds.put_make_var(var,temp)
         self.masked_var(var,field)
+        #if var in progfields:
+        if var in progfields or var in ['QT','THV']:
+            dumpmasks=['tr_cc','tr_sh','br_cc','br_sh','bl_cc','bl_sh','tl_cc','tl_sh']
+            if not outputconfig.lsamp:
+                return
+            elif 'xe' in allfields[var]:
+                for mask in dumpmasks:
+                    temp=1.0*field #force copy
+                    whereinf=(self.masks[mask].fieldxe==0);
+                    temp[whereinf] = nan
+                    self.clouds.put_make_sampvar(var,temp,mask)          
+            elif 'ye' in allfields[var]:
+                for mask in dumpmasks:
+                    temp=1.0*field #force copy
+                    whereinf=(self.masks[mask].fieldye==0);
+                    temp[whereinf] = nan
+                    self.clouds.put_make_sampvar(var,temp,mask)          
+            elif 'ze' in allfields[var]:
+                for mask in dumpmasks:
+                    temp=1.0*field #force copy
+                    whereinf=(self.masks[mask].fieldze==0);
+                    temp[whereinf] = nan
+                    self.clouds.put_make_sampvar(var,temp,mask)          
+            else:
+                for mask in dumpmasks:
+                    temp=1.0*field #force copy
+                    whereinf=(self.masks[mask].field==0);
+                    temp[whereinf] = nan
+                    self.clouds.put_make_sampvar(var,temp,mask)  
+
     def ref_var(self,var,field):
         self.stat_1d.put_make_var(var,field)
     def masked_var(self,var,field):

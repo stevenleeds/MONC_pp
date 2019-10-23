@@ -70,10 +70,19 @@ class dataprocessor(dataorganizer):
         buoyp=delp-buoyp
         qv=self.gv('q_vapour')
         qc=self.gv('q_cloud_liquid_mass')
+
+        # Purity and radioactive tracers
         puritytracer=self.gv('q_purity_tracer')
         purity2=puritytracer*puritytracer
         radiotracer1=self.gv('q_radio1') #tau 30 mins
         radiotracer2=self.gv('q_radio2') #tau 5 mins
+
+        # quadrant tracers
+        trac_tl = self.gv('q_tracer_tl')
+        trac_tr = self.gv('q_tracer_tr')
+        trac_bl = self.gv('q_tracer_bl')
+        trac_br = self.gv('q_tracer_br')
+
         qi=0.0*qc
         qci=qc+qi
         pref=self.gref('prefn')
@@ -90,11 +99,18 @@ class dataprocessor(dataorganizer):
         self.process_var('QV',qv)
         qt=qci+qv
         self.process_var('QT',qt)
+
+        # Add in extra tracer fields
         self.process_var('PURITY',puritytracer)
         self.process_var('PURITY2',purity2)
         self.process_var('RADIO1',radiotracer1)
         self.process_var('RADIO2',radiotracer2)
-        print 'shape of theta array is', np.shape(theta)
+        self.process_var('TRACER_TL',trac_tl)
+        self.process_var('TRACER_TR',trac_tr)
+        self.process_var('TRACER_BL',trac_bl)
+        self.process_var('TRACER_BR',trac_br)
+
+        #print 'shape of theta array is', np.shape(theta)
         self.process_var('THETA',theta)          
         tmse=t+(grav/cp)*self.helper.zc[None,None,:]+(rlvap/cp)*qv-((rlsub-rlvap)/cp)*qi
         tlise=t+(grav/cp)*self.helper.zc[None,None,:]-(rlvap/cp)*qc-(rlsub/cp)*qi
@@ -128,7 +144,8 @@ class dataprocessor(dataorganizer):
         del qci 
         #rqtracer=rhon[None,None,:]*qtracer
         #del qtracer, p,    puritytracer, radiotracer1, radiotracer2
-        del p,  puritytracer, purity2, radiotracer1, radiotracer2
+        del p,  puritytracer, purity2, radiotracer1, radiotracer2, trac_tl, trac_tr, trac_bl, trac_br
+
         thetal=theta-(rlvap/(cp*exn))*qc-(rlsub/(cp*exn))*qi
         self.process_var('THETAL', thetal)
         thetav=theta*(1+(0.61*qv)-qc) #virtual potential temperature
@@ -230,7 +247,7 @@ if __name__ == "__main__":
     else:
         multiplex_infrastructure.sysconfig.update(args.sysconfig_file,args.case,args.exper,args.filenumber,args.overwrite)
     mkdir_p(multiplex_infrastructure.sysconfig.scratchdir)
-    mkdir_p(multiplex_infrastructure.sysconfig.scratchdir+'/clouds')
+    mkdir_p(multiplex_infrastructure.sysconfig.scratchdir+'/pdfdata')
     mkdir_p(multiplex_infrastructure.sysconfig.projectdir)
     runme()
     print('finished copying to project: '+args.case+' '+args.exper+' '+args.filenumber)
@@ -244,7 +261,7 @@ def runprof(case,exper,filenumber,cfgfile='default.cfg',sysfile=None,overwrite=T
     else:
         multiplex_infrastructure.sysconfig.update(sysfile,case,exper,filenumber,overwrite)
     mkdir_p(multiplex_infrastructure.sysconfig.scratchdir)
-    mkdir_p(multiplex_infrastructure.sysconfig.scratchdir+'/clouds')
+    mkdir_p(multiplex_infrastructure.sysconfig.scratchdir+'/pdfdata')
     mkdir_p(multiplex_infrastructure.sysconfig.projectdir)
     runme()
     print('finished copying to project: '+case+' '+exper+' '+args.filenumber)

@@ -109,6 +109,10 @@ derivedfields={
 'OO':['vorticity tensor magnitude',u's-2'],
 'SS':['rate of strain tensor magnitude',u's-2'],
 'QCRITERION':['Q criterion',u's-2'],
+'TRACER_TL':['tracer in tl quadrant',u'-'],
+'TRACER_TR':['tracer in tr quadrant',u'-'],
+'TRACER_BL':['tracer in bl quadrant',u'-'],
+'TRACER_BR':['tracer in br quadrant',u'-']
 }
 
 # vertically integrated/maximum/minimum variables
