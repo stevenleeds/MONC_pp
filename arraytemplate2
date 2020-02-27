@@ -1,0 +1,17 @@
+#!/bin/bash
+#PBS -A n02-GENESIS
+#PBS -l select=1:bigmem=true
+#PBS -l walltime=4:00:00 
+#PBS -J 1-32
+#PBS -r y
+#PBS -N MONCArray2
+module load python-compute/2.7.6
+module load pc-netcdf4-python
+module load pc-numpy
+module load pc-scipy
+
+cd /work/n02/n02/sboeing/MONC_pp_z_curlcurl
+aprun -n 1 -d 24 python pp_multiplex.py -c bubble_800.cfg -s archer.syscfg warm_pert_midres 307 $PBS_ARRAY_INDEX \
+                 --overwrite \
+                 > my_pyout_$PBS_ARRAY_INDEX.txt \
+                 2> my_pyerr_$PBS_ARRAY_INDEX.txt
