@@ -95,6 +95,18 @@ def make_filelist():
         filelist[i]=glob.glob(sysconfig.fulldir+types[i])
         filelist[i].sort() 
         filelist[i].sort(key=len)       
+
+# make a filelist with one element. Forget about the done marking in this 
+def make_onefile(filenumber):
+    global filelist
+    types = {'3ddump':'3d_*.nc'} # file type list, currently contains only 3D output to be postprocessed
+    filelist={}
+    for i in types:
+        filelist[i]=glob.glob(sysconfig.fulldir+types[i])
+        filelist[i].sort() 
+        filelist[i].sort(key=len)       
+    filelist=[filelist[filenumber]]
+
  
 # create a tarfile (for cloud fields)
 def make_tarfile(output_filename, infiles):
@@ -255,6 +267,22 @@ def process_3doutput(processor):
         print 'cpu time is '+str(time.clock()-start)
         moncdata.close()
         os.rename(file_to_process,file_to_process+'_done') 
+
+# process 3d output fields
+def process_onefile(processor):
+    global heighthelper
+    helper=nchelper()
+    print 'performing data check'
+    for file_to_process in filelist['3ddump']:
+        print file_to_process
+        moncdata=Dataset(file_to_process,'r',format='NETCDF4')
+        moncdata.close()
+    for file_to_process in filelist['3ddump']:
+        print 'processing '+file_to_process
+        moncdata=Dataset(file_to_process,'r',format='NETCDF4')
+        processor.app_tstep(moncdata,helper)
+        print 'cpu time is '+str(time.clock()-start)
+        moncdata.close()
 
 # replace missing values for reading into ncview
 # and copy to project (storage) directory
@@ -510,8 +538,8 @@ class nchelper(object,get_variable_class):
         self.zc=hstack(([bottom],zhalf))
         self.ze=self.gdimt('z')
         self.rhon=self.gref('rhon')
-        self.xe=self.gdim('x')*self.data.variables['x_resolution'][self.step]
-        self.ye=self.gdim('y')*self.data.variables['y_resolution'][self.step]
+        self.xe=self.gdim('x')*outputconfig.dx
+        self.ye=self.gdim('y')*outputconfig.dy
         if self.svlist==[]:
            self.initsvlist()
     def initsvlist(self):
@@ -618,12 +646,12 @@ class ncobject(object,get_variable_class):
         except:
             pass
     def init_dimxc(self,sel=None):
-        xe=self.gdim('x')*self.data.variables['x_resolution'][self.step]
+        xe=self.gdim('x')*outputconfig.dx
         xmin=hstack(([0],xe[:-1]))
         self.xc=cropped(0.5*(xmin+xe))
         self.init_dim('xc','x [m]',self.xc,sel)    
     def init_dimyc(self,sel=None):
-        ye=self.gdim('y')*self.data.variables['y_resolution'][self.step]
+        ye=self.gdim('y')*outputconfig.dy
         ymin=hstack(([0],ye[:-1]))
         self.yc=cropped(0.5*(ymin+ye))
         self.init_dim('yc','y [m]',self.yc,sel)
@@ -635,10 +663,10 @@ class ncobject(object,get_variable_class):
         self.zc=hstack(([bottom],zhalf))
         self.init_dim('zc','height [m]',self.zc,sel)    
     def init_dimxe(self,sel=None):
-        self.xe=cropped(self.gdim('x')*self.data.variables['x_resolution'][self.step]) 
+        self.xe=cropped(self.gdim('x')*outputconfig.dx) 
         self.init_dim('xe','x [m] (staggered)',self.xe,sel)
     def init_dimye(self,sel=None):
-        self.ye=cropped(self.gdim('y')*self.data.variables['y_resolution'][self.step])
+        self.ye=cropped(self.gdim('y')*outputconfig.dy)
         self.init_dim('ye','y [m] (staggered)',self.ye,sel)
     def init_dimze(self,sel=None):
         self.ze=self.gdimt('z')
@@ -839,13 +867,13 @@ class statgroupspectra(ncobject):
                 
 class statgroupspectra_y(statgroupspectra):        
     def get_spacing(self):
-        y=self.gdim('y')*self.data.variables['y_resolution'][self.step]
+        y=self.gdim('y')*self.dy
         self.dgrid=y[1]-y[0]
         self.direction='y'
         
 class statgroupspectra_x(statgroupspectra):        
     def get_spacing(self):
-        x=self.gdim('x')*self.data.variables['x_resolution'][self.step]
+        x=self.gdim('x')*outputconfig.dx
         self.dgrid=x[1]-x[0]
         self.direction='x'
 
